@@ -74,8 +74,8 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
   const deleteItem = useCallback(async (id: string, permanent: boolean = false): Promise<void> => {
     try {
       if (permanent) {
-        // Remoção permanente - remove do banco de dados sem rastreamento offline
-        await offlineStorage.removePermanently(entityType, id);
+        // Remoção permanente - remove diretamente sem rastreamento offline
+        await offlineStorage.removeById(entityType, id); // Usando removeById em vez de removePermanently
         toast.success(`${entityType === 'mecanico' ? 'Mecânico' : entityType === 'servico' ? 'Serviço' : 'Vale'} removido permanentemente.`);
       } else {
         // Remoção com rastreamento para sincronização

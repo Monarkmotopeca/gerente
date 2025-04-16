@@ -55,7 +55,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
       } else {
         toast.warning(
           "Você está offline. As alterações serão salvas localmente e sincronizadas quando a conexão for restabelecida.",
-          { duration: 5000 }
+          { duration: 2 }
         );
       }
     };
@@ -137,38 +137,6 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-            
-            {!isOnline && (
-              <SidebarGroup className="mt-4">
-                <SidebarGroupLabel>Status</SidebarGroupLabel>
-                <SidebarGroupContent className="px-2">
-                  <div className="flex items-center space-x-2 rounded-md bg-yellow-100 dark:bg-yellow-900/20 p-3 text-yellow-800 dark:text-yellow-200">
-                    <CloudOff className="h-5 w-5" />
-                    <span className="text-sm">Modo Offline</span>
-                    {pendingUploads > 0 && (
-                      <Badge variant="outline" className="ml-auto">
-                        {pendingUploads} pendentes
-                      </Badge>
-                    )}
-                  </div>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            )}
-            
-            {isOnline && pendingUploads > 0 && (
-              <SidebarGroup className="mt-4">
-                <SidebarGroupLabel>Sincronização</SidebarGroupLabel>
-                <SidebarGroupContent className="px-2">
-                  <div className="flex items-center space-x-2 rounded-md bg-blue-100 dark:bg-blue-900/20 p-3 text-blue-800 dark:text-blue-200">
-                    <CloudUpload className="h-5 w-5" />
-                    <span className="text-sm">Sincronizando dados</span>
-                    <Badge variant="outline" className="ml-auto">
-                      {pendingUploads} pendentes
-                    </Badge>
-                  </div>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            )}
           </SidebarContent>
           <SidebarFooter className="border-t border-border p-4">
             <div className="flex flex-col space-y-4">

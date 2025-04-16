@@ -6,14 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PlusCircle, Pencil, Trash2, Search, X, Filter, Wrench, FileText, DollarSign, Phone } from "lucide-react";
+import { PlusCircle, Pencil, Trash2, Search, X, Filter, Wrench, FileText, DollarSign, Phone, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { StatusSincronizacao } from "@/components/StatusSincronizacao";
 
 // Tipos para serviços
 type StatusServico = "em_andamento" | "concluido" | "cancelado";
@@ -103,6 +102,21 @@ const mockServicos: Servico[] = [
     status: "cancelado",
   },
 ];
+
+// Função para gerar o link de agradecimento via WhatsApp
+const gerarLinkWhatsApp = (telefone: string) => {
+  // Limpa o telefone para garantir que só tenha números
+  const numeroLimpo = telefone.replace(/\D/g, '');
+  
+  // Verifica se tem 11 dígitos (DDD + 9 + número)
+  if (numeroLimpo.length !== 11) {
+    return null;
+  }
+  
+  const mensagem = "Agradecemos%20imensamente%20pela%20sua%20prefer%C3%AAncia%20em%20realizar%20seu%20servi%C3%A7o%20na%20MONARK%20MOTOPE%C3%87AS%20E%20BICICLETARIA!%20%F0%9F%9A%B2%F0%9F%9A%A7%0A%0ALembramos%20que,%20segundo%20o%20C%C3%B3digo%20de%20Defesa%20do%20Consumidor%20%28CDC%29,%20a%20garantia%20para%20servi%C3%A7os%20e%20pe%C3%A7as%20%C3%A9%20de%2090%20dias.%20%F0%9F%93%9D%F0%9F%9A%96%0A%0AGuarde%20o%20comprovante%20fiscal%20e,%20caso%20haja%20algum%20defeito,%20n%C3%A3o%20hesite%20em%20nos%20procurar%20presencialmente%20para%20que%20possamos%20resolver%20o%20mais%20r%C3%A1pido%20poss%C3%ADvel!%20%F0%9F%98%8A%F0%9F%9A%90%0A%0AEstamos%20%C3%A0%20disposi%C3%A7%C3%A3o%20para%20atend%C3%AA-lo%20com%20todo%20o%20cuidado%20e%20qualidade%20que%20voc%C3%AA%20merece.%20%F0%9F%91%A8%20%F0%9F%9A%A7%F0%9F%99%99%0A%0AMONARK%20MOTOPE%C3%87AS%20E%20BICICLETARIA%20%E2%80%93%20Sempre%20ao%20seu%20lado!";
+  
+  return `https://wa.me/55${numeroLimpo}?text=${mensagem}`;
+};
 
 const Servicos = () => {
   const { user } = useAuth();
@@ -298,6 +312,16 @@ const Servicos = () => {
     setErrors({});
   };
 
+  // Função para agradecer ao cliente via WhatsApp
+  const agradecerCliente = (telefone: string) => {
+    const whatsappLink = gerarLinkWhatsApp(telefone);
+    if (whatsappLink) {
+      window.open(whatsappLink, '_blank');
+    } else {
+      toast.error("Número de telefone inválido para envio de mensagem");
+    }
+  };
+
   // Filtrar serviços
   const servicosFiltrados = servicos.filter(servico => {
     const matchBusca = 
@@ -340,188 +364,304 @@ const Servicos = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="md:col-span-3">
-            <Tabs defaultValue="todos" className="w-full">
-              <TabsList className="mb-4">
-                <TabsTrigger value="todos" onClick={() => setFiltroStatus("todos")}>
-                  Todos os Serviços
-                </TabsTrigger>
-                <TabsTrigger value="em_andamento" onClick={() => setFiltroStatus("em_andamento")}>
-                  Em Andamento
-                </TabsTrigger>
-                <TabsTrigger value="concluido" onClick={() => setFiltroStatus("concluido")}>
-                  Concluídos
-                </TabsTrigger>
-                <TabsTrigger value="cancelado" onClick={() => setFiltroStatus("cancelado")}>
-                  Cancelados
-                </TabsTrigger>
-              </TabsList>
+        <div>
+          <Tabs defaultValue="todos" className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="todos" onClick={() => setFiltroStatus("todos")}>
+                Todos os Serviços
+              </TabsTrigger>
+              <TabsTrigger value="em_andamento" onClick={() => setFiltroStatus("em_andamento")}>
+                Em Andamento
+              </TabsTrigger>
+              <TabsTrigger value="concluido" onClick={() => setFiltroStatus("concluido")}>
+                Concluídos
+              </TabsTrigger>
+              <TabsTrigger value="cancelado" onClick={() => setFiltroStatus("cancelado")}>
+                Cancelados
+              </TabsTrigger>
+            </TabsList>
 
-              <TabsContent value="todos" className="mt-0">
-                <Card>
-                  <CardContent className="p-0">
-                    <Table>
-                      <TableHeader>
+            <TabsContent value="todos" className="mt-0">
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Veículo</TableHead>
+                        <TableHead>Mecânico</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {servicosFiltrados.length === 0 ? (
                         <TableRow>
-                          <TableHead>Data</TableHead>
-                          <TableHead>Cliente</TableHead>
-                          <TableHead>Veículo</TableHead>
-                          <TableHead>Mecânico</TableHead>
-                          <TableHead>Valor</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Ações</TableHead>
+                          <TableCell colSpan={7} className="text-center py-4">
+                            Nenhum serviço encontrado
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {servicosFiltrados.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={7} className="text-center py-4">
-                              Nenhum serviço encontrado
+                      ) : (
+                        servicosFiltrados.map((servico) => (
+                          <TableRow key={servico.id}>
+                            <TableCell>
+                              {new Date(servico.data).toLocaleDateString('pt-BR')}
                             </TableCell>
-                          </TableRow>
-                        ) : (
-                          servicosFiltrados.map((servico) => (
-                            <TableRow key={servico.id}>
-                              <TableCell>
-                                {new Date(servico.data).toLocaleDateString('pt-BR')}
-                              </TableCell>
-                              <TableCell>{servico.cliente}</TableCell>
-                              <TableCell>{servico.veiculo}</TableCell>
-                              <TableCell>{servico.mecanicoNome}</TableCell>
-                              <TableCell>{formatarMoeda(servico.valor)}</TableCell>
-                              <TableCell>
-                                <span
-                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                    servico.status === "em_andamento"
-                                      ? "bg-blue-100 text-blue-800"
-                                      : servico.status === "concluido"
-                                      ? "bg-green-100 text-green-800"
-                                      : "bg-red-100 text-red-800"
-                                  }`}
-                                >
-                                  {servico.status === "em_andamento"
-                                    ? "Em andamento"
+                            <TableCell>{servico.cliente}</TableCell>
+                            <TableCell>{servico.veiculo}</TableCell>
+                            <TableCell>{servico.mecanicoNome}</TableCell>
+                            <TableCell>{formatarMoeda(servico.valor)}</TableCell>
+                            <TableCell>
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  servico.status === "em_andamento"
+                                    ? "bg-blue-100 text-blue-800"
                                     : servico.status === "concluido"
-                                    ? "Concluído"
-                                    : "Cancelado"}
-                                </span>
-                              </TableCell>
-                              <TableCell className="text-right">
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-red-100 text-red-800"
+                                }`}
+                              >
+                                {servico.status === "em_andamento"
+                                  ? "Em andamento"
+                                  : servico.status === "concluido"
+                                  ? "Concluído"
+                                  : "Cancelado"}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => abrirEdicao(servico)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              {servico.status === "concluido" && (
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => abrirEdicao(servico)}
+                                  onClick={() => agradecerCliente(servico.telefone)}
+                                  title="Agradecer ao Cliente"
                                 >
-                                  <Pencil className="h-4 w-4" />
+                                  <MessageSquare className="h-4 w-4 text-green-500" />
                                 </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => excluirServico(servico.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="em_andamento" className="mt-0">
-                <Card>
-                  <CardContent className="p-0">
-                    {/* O mesmo conteúdo da tabela será exibido aqui, mas filtrado */}
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Data</TableHead>
-                          <TableHead>Cliente</TableHead>
-                          <TableHead>Veículo</TableHead>
-                          <TableHead>Mecânico</TableHead>
-                          <TableHead>Valor</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-right">Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {servicosFiltrados.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={7} className="text-center py-4">
-                              Nenhum serviço em andamento
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => excluirServico(servico.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
                             </TableCell>
                           </TableRow>
-                        ) : (
-                          servicosFiltrados.map((servico) => (
-                            <TableRow key={servico.id}>
-                              <TableCell>
-                                {new Date(servico.data).toLocaleDateString('pt-BR')}
-                              </TableCell>
-                              <TableCell>{servico.cliente}</TableCell>
-                              <TableCell>{servico.veiculo}</TableCell>
-                              <TableCell>{servico.mecanicoNome}</TableCell>
-                              <TableCell>{formatarMoeda(servico.valor)}</TableCell>
-                              <TableCell>
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                  Em andamento
-                                </span>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => abrirEdicao(servico)}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => excluirServico(servico.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-              <TabsContent value="concluido" className="mt-0">
-                {/* Tabela de Serviços Concluídos */}
-                <Card>
-                  <CardContent className="p-0">
-                    <Table>
-                      {/* Tabela similar às anteriores, mas filtrada por status "concluido" */}
-                    </Table>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+            <TabsContent value="em_andamento" className="mt-0">
+              <Card>
+                <CardContent className="p-0">
+                  {/* O mesmo conteúdo da tabela será exibido aqui, mas filtrado */}
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Veículo</TableHead>
+                        <TableHead>Mecânico</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {servicosFiltrados.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-4">
+                            Nenhum serviço em andamento
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        servicosFiltrados.map((servico) => (
+                          <TableRow key={servico.id}>
+                            <TableCell>
+                              {new Date(servico.data).toLocaleDateString('pt-BR')}
+                            </TableCell>
+                            <TableCell>{servico.cliente}</TableCell>
+                            <TableCell>{servico.veiculo}</TableCell>
+                            <TableCell>{servico.mecanicoNome}</TableCell>
+                            <TableCell>{formatarMoeda(servico.valor)}</TableCell>
+                            <TableCell>
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                Em andamento
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => abrirEdicao(servico)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => excluirServico(servico.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-              <TabsContent value="cancelado" className="mt-0">
-                {/* Tabela de Serviços Cancelados */}
-                <Card>
-                  <CardContent className="p-0">
-                    <Table>
-                      {/* Tabela similar às anteriores, mas filtrada por status "cancelado" */}
-                    </Table>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          </div>
+            <TabsContent value="concluido" className="mt-0">
+              {/* Tabela de Serviços Concluídos */}
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Veículo</TableHead>
+                        <TableHead>Mecânico</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {servicosFiltrados.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-4">
+                            Nenhum serviço concluído
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        servicosFiltrados.map((servico) => (
+                          <TableRow key={servico.id}>
+                            <TableCell>
+                              {new Date(servico.data).toLocaleDateString('pt-BR')}
+                            </TableCell>
+                            <TableCell>{servico.cliente}</TableCell>
+                            <TableCell>{servico.veiculo}</TableCell>
+                            <TableCell>{servico.mecanicoNome}</TableCell>
+                            <TableCell>{formatarMoeda(servico.valor)}</TableCell>
+                            <TableCell>
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                Concluído
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => abrirEdicao(servico)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => agradecerCliente(servico.telefone)}
+                                title="Agradecer ao Cliente"
+                              >
+                                <MessageSquare className="h-4 w-4 text-green-500" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => excluirServico(servico.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-          <div className="md:col-span-1">
-            <StatusSincronizacao />
-          </div>
+            <TabsContent value="cancelado" className="mt-0">
+              {/* Tabela de Serviços Cancelados */}
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Veículo</TableHead>
+                        <TableHead>Mecânico</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {servicosFiltrados.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-4">
+                            Nenhum serviço cancelado
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        servicosFiltrados.map((servico) => (
+                          <TableRow key={servico.id}>
+                            <TableCell>
+                              {new Date(servico.data).toLocaleDateString('pt-BR')}
+                            </TableCell>
+                            <TableCell>{servico.cliente}</TableCell>
+                            <TableCell>{servico.veiculo}</TableCell>
+                            <TableCell>{servico.mecanicoNome}</TableCell>
+                            <TableCell>{formatarMoeda(servico.valor)}</TableCell>
+                            <TableCell>
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                Cancelado
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => abrirEdicao(servico)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => excluirServico(servico.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* Diálogo para adicionar/editar serviço */}
