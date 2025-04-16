@@ -1,277 +1,359 @@
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import * as z from "zod";
-import { UserPlus, UserMinus, KeyRound, Trash2 } from "lucide-react";
-import { Navigate } from "react-router-dom";
+import { UserPlus, Pencil, Trash2 } from "lucide-react";
 
-// Schema para validação do formulário de usuário
-const userFormSchema = z.object({
-  nome: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres" }),
-  email: z.string().email({ message: "Email inválido" }),
-  password: z.string().min(6, { message: "Senha deve ter pelo menos 6 caracteres" }),
-  perfil: z.enum(["admin", "usuario", "mecanico"], {
-    required_error: "Selecione um perfil",
-  }),
-});
+// Interface para usuário sem senha
+interface User {
+  id: string;
+  nome: string;
+  username: string;
+  perfil: "admin" | "usuario" | "mecanico";
+}
 
-type UserFormValues = z.infer<typeof userFormSchema>;
-
-// Schema para validação do formulário de alteração de senha
-const passwordFormSchema = z.object({
-  password: z.string().min(6, { message: "Senha deve ter pelo menos 6 caracteres" }),
-});
-
-type PasswordFormValues = z.infer<typeof passwordFormSchema>;
+// Interface para formulário de adição de usuário (com senha)
+interface UserFormData {
+  nome: string;
+  username: string;
+  perfil: "admin" | "usuario" | "mecanico";
+  password: string;
+}
 
 const UserManagement = () => {
-  const { user, getUserList, addUser, removeUser, updateUserPassword } = useAuth();
-  const [users, setUsers] = useState<any[]>([]);
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const { getUserList, addUser, removeUser, updateUserPassword, user: currentUser } = useAuth();
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [openAddDialog, setOpenAddDialog] = useState(false);
+  const [openPasswordDialog, setOpenPasswordDialog] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-
-  // Form para adicionar usuário
-  const userForm = useForm<UserFormValues>({
-    resolver: zodResolver(userFormSchema),
-    defaultValues: {
-      nome: "",
-      email: "",
-      password: "",
-      perfil: "usuario",
-    },
+  
+  // Estado para formulário de adição de usuário
+  const [formData, setFormData] = useState<UserFormData>({
+    nome: "",
+    username: "",
+    perfil: "usuario",
+    password: "",
   });
-
-  // Form para alteração de senha
-  const passwordForm = useForm<PasswordFormValues>({
-    resolver: zodResolver(passwordFormSchema),
-    defaultValues: {
-      password: "",
-    },
-  });
-
-  // Se não for admin, redireciona para o dashboard
-  if (user?.perfil !== "admin") {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  // Carrega a lista de usuários
-  useEffect(() => {
-    const loadUsers = async () => {
-      const userList = await getUserList();
-      setUsers(userList);
-    };
-    
-    loadUsers();
-  }, [getUserList]);
-
-  // Adiciona um novo usuário
-  const handleAddUser = async (data: UserFormValues) => {
+  
+  // Estado para alteração de senha
+  const [newPassword, setNewPassword] = useState("");
+  
+  // Carregar lista de usuários
+  const loadUsers = async () => {
     try {
-      await addUser(data);
-      toast.success("Usuário criado com sucesso!");
-      setIsAddDialogOpen(false);
-      userForm.reset();
-      
-      // Recarrega a lista de usuários
+      setLoading(true);
       const userList = await getUserList();
       setUsers(userList);
     } catch (error) {
-      console.error("Erro ao criar usuário:", error);
-      toast.error("Erro ao criar usuário. Verifique se o email já está em uso.");
+      console.error("Erro ao carregar usuários:", error);
+      toast.error("Erro ao carregar lista de usuários", {
+        duration: 2,
+        position: "bottom-right"
+      });
+    } finally {
+      setLoading(false);
     }
   };
-
-  // Remove um usuário
-  const handleRemoveUser = async (userId: string) => {
+  
+  // Efeito para carregar usuários ao montar o componente
+  useEffect(() => {
+    loadUsers();
+  }, []);
+  
+  // Manipuladores para o formulário de adição
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+  
+  const handleSelectChange = (value: string) => {
+    setFormData(prev => ({ 
+      ...prev, 
+      perfil: value as "admin" | "usuario" | "mecanico" 
+    }));
+  };
+  
+  // Adicionar novo usuário
+  const handleAddUser = async () => {
+    try {
+      // Verificar se todos os campos foram preenchidos
+      if (!formData.nome || !formData.username || !formData.password) {
+        toast.error("Preencha todos os campos obrigatórios", {
+          duration: 2,
+          position: "bottom-right"
+        });
+        return;
+      }
+      
+      // Enviar dados para adicionar usuário
+      await addUser({
+        nome: formData.nome,
+        username: formData.username,
+        perfil: formData.perfil,
+        password: formData.password
+      });
+      
+      // Fechar o diálogo e limpar o formulário
+      setOpenAddDialog(false);
+      setFormData({
+        nome: "",
+        username: "",
+        perfil: "usuario",
+        password: "",
+      });
+      
+      // Recarregar a lista de usuários
+      await loadUsers();
+      
+      toast.success("Usuário adicionado com sucesso", {
+        duration: 2,
+        position: "bottom-right"
+      });
+    } catch (error) {
+      console.error("Erro ao adicionar usuário:", error);
+      toast.error("Erro ao adicionar usuário", {
+        duration: 2,
+        position: "bottom-right"
+      });
+    }
+  };
+  
+  // Remover usuário
+  const handleRemoveUser = async (id: string) => {
     if (window.confirm("Tem certeza que deseja remover este usuário?")) {
       try {
-        await removeUser(userId);
-        toast.success("Usuário removido com sucesso!");
-        
-        // Recarrega a lista de usuários
-        const userList = await getUserList();
-        setUsers(userList);
+        await removeUser(id);
+        await loadUsers();
+        toast.success("Usuário removido com sucesso", {
+          duration: 2,
+          position: "bottom-right"
+        });
       } catch (error) {
         console.error("Erro ao remover usuário:", error);
-        toast.error("Erro ao remover usuário.");
+        toast.error("Erro ao remover usuário", {
+          duration: 2,
+          position: "bottom-right"
+        });
       }
     }
   };
-
-  // Altera a senha de um usuário
-  const handlePasswordChange = async (data: PasswordFormValues) => {
-    if (!selectedUserId) return;
-    
+  
+  // Abrir diálogo para alterar senha
+  const handleOpenPasswordDialog = (userId: string) => {
+    setSelectedUserId(userId);
+    setNewPassword("");
+    setOpenPasswordDialog(true);
+  };
+  
+  // Alterar senha
+  const handleChangePassword = async () => {
     try {
-      await updateUserPassword(selectedUserId, data.password);
-      toast.success("Senha alterada com sucesso!");
-      setIsPasswordDialogOpen(false);
-      passwordForm.reset();
+      if (!selectedUserId || !newPassword) {
+        toast.error("Senha inválida", {
+          duration: 2,
+          position: "bottom-right"
+        });
+        return;
+      }
+      
+      await updateUserPassword(selectedUserId, newPassword);
+      setOpenPasswordDialog(false);
+      toast.success("Senha alterada com sucesso", {
+        duration: 2,
+        position: "bottom-right"
+      });
     } catch (error) {
       console.error("Erro ao alterar senha:", error);
-      toast.error("Erro ao alterar senha.");
+      toast.error("Erro ao alterar senha", {
+        duration: 2,
+        position: "bottom-right"
+      });
     }
   };
-
-  // Abre o dialog de alteração de senha
-  const openPasswordDialog = (userId: string) => {
-    setSelectedUserId(userId);
-    setIsPasswordDialogOpen(true);
-  };
-
+  
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Gerenciamento de Usuários</h1>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Novo Usuário
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Adicionar Novo Usuário</DialogTitle>
-              <DialogDescription>
-                Preencha os dados para criar um novo usuário no sistema.
-              </DialogDescription>
-            </DialogHeader>
-            <Form {...userForm}>
-              <form onSubmit={userForm.handleSubmit(handleAddUser)} className="space-y-4">
-                <FormField
-                  control={userForm.control}
-                  name="nome"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nome</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Nome do usuário" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={userForm.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <Input placeholder="email@exemplo.com" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={userForm.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Senha</FormLabel>
-                      <FormControl>
-                        <Input type="password" placeholder="******" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={userForm.control}
-                  name="perfil"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Perfil</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione um perfil" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="admin">Administrador</SelectItem>
-                          <SelectItem value="usuario">Usuário</SelectItem>
-                          <SelectItem value="mecanico">Mecânico</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <DialogFooter>
-                  <Button type="submit">Adicionar Usuário</Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Usuários do Sistema</CardTitle>
-          <CardDescription>
-            Gerencie os usuários que têm acesso ao sistema.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {users.length === 0 ? (
-              <p className="text-center text-muted-foreground py-4">Nenhum usuário encontrado</p>
-            ) : (
-              <div className="divide-y">
-                {users.map((user) => (
-                  <div key={user.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{user.nome}</p>
-                      <p className="text-sm text-muted-foreground">{user.email}</p>
-                      <p className="text-xs text-muted-foreground capitalize">
-                        {user.perfil === "admin" ? "Administrador" : 
-                         user.perfil === "usuario" ? "Usuário" : "Mecânico"}
-                      </p>
-                    </div>
-                    <div className="flex space-x-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => openPasswordDialog(user.id)}
-                      >
-                        <KeyRound className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="destructive" 
-                        size="sm"
-                        onClick={() => handleRemoveUser(user.id)}
-                      >
-                        <UserMinus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+    <Card>
+      <CardHeader>
+        <div className="flex justify-between items-center">
+          <div>
+            <CardTitle>Gerenciamento de Usuários</CardTitle>
+            <CardDescription>
+              Adicione, edite ou remova usuários do sistema
+            </CardDescription>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Dialog para alteração de senha */}
-      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+          
+          <Dialog open={openAddDialog} onOpenChange={setOpenAddDialog}>
+            <DialogTrigger asChild>
+              <Button variant="default" size="sm">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Novo Usuário
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Adicionar Novo Usuário</DialogTitle>
+                <DialogDescription>
+                  Preencha os campos abaixo para adicionar um novo usuário ao sistema.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="nome">Nome Completo</Label>
+                  <Input
+                    id="nome"
+                    name="nome"
+                    value={formData.nome}
+                    onChange={handleInputChange}
+                    placeholder="Nome do usuário"
+                    required
+                  />
+                </div>
+                
+                <div className="grid gap-2">
+                  <Label htmlFor="username">Nome de Usuário</Label>
+                  <Input
+                    id="username"
+                    name="username"
+                    value={formData.username}
+                    onChange={handleInputChange}
+                    placeholder="Nome de usuário para login"
+                    required
+                  />
+                </div>
+                
+                <div className="grid gap-2">
+                  <Label htmlFor="perfil">Perfil</Label>
+                  <Select 
+                    value={formData.perfil} 
+                    onValueChange={handleSelectChange}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um perfil" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Administrador</SelectItem>
+                      <SelectItem value="usuario">Usuário</SelectItem>
+                      <SelectItem value="mecanico">Mecânico</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="grid gap-2">
+                  <Label htmlFor="password">Senha</Label>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    placeholder="Senha do usuário"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpenAddDialog(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleAddUser}>
+                  Adicionar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardHeader>
+      
+      <CardContent>
+        {loading ? (
+          <div className="flex justify-center p-4">
+            <p>Carregando usuários...</p>
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Usuário</TableHead>
+                <TableHead>Perfil</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell className="font-medium">{user.nome}</TableCell>
+                  <TableCell>{user.username}</TableCell>
+                  <TableCell className="capitalize">
+                    {user.perfil === "admin" ? "Administrador" : 
+                     user.perfil === "usuario" ? "Usuário" : "Mecânico"}
+                  </TableCell>
+                  <TableCell className="text-right space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenPasswordDialog(user.id)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                      <span className="sr-only">Alterar senha</span>
+                    </Button>
+                    
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleRemoveUser(user.id)}
+                      disabled={user.id === currentUser?.id}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span className="sr-only">Remover</span>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+      
+      <Dialog open={openPasswordDialog} onOpenChange={setOpenPasswordDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Alterar Senha</DialogTitle>
@@ -279,29 +361,32 @@ const UserManagement = () => {
               Digite a nova senha para o usuário.
             </DialogDescription>
           </DialogHeader>
-          <Form {...passwordForm}>
-            <form onSubmit={passwordForm.handleSubmit(handlePasswordChange)} className="space-y-4">
-              <FormField
-                control={passwordForm.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nova Senha</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder="******" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+          
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="newPassword">Nova Senha</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Digite a nova senha"
+                required
               />
-              <DialogFooter>
-                <Button type="submit">Atualizar Senha</Button>
-              </DialogFooter>
-            </form>
-          </Form>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenPasswordDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleChangePassword}>
+              Salvar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </Card>
   );
 };
 

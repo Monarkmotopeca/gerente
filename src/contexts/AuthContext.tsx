@@ -6,7 +6,7 @@ import * as offlineStorage from "@/services/offlineStorage";
 type User = {
   id: string;
   nome: string;
-  email: string;
+  username: string;
   perfil: "admin" | "usuario" | "mecanico";
 };
 
@@ -17,7 +17,7 @@ type UserWithPassword = User & {
 type AuthContextType = {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
   getUserList: () => Promise<User[]>;
@@ -42,21 +42,21 @@ const DEFAULT_USERS = [
   {
     id: "1",
     nome: "Administrador",
-    email: "admin@oficina.com",
-    password: "admin123",
+    username: "admin",
+    password: "admin",
     perfil: "admin" as const,
   },
   {
     id: "2",
     nome: "Usuário Padrão",
-    email: "usuario@oficina.com",
+    username: "usuario",
     password: "usuario123",
     perfil: "usuario" as const,
   },
   {
     id: "3",
     nome: "Mecânico",
-    email: "mecanico@oficina.com",
+    username: "mecanico",
     password: "mecanico123",
     perfil: "mecanico" as const,
   },
@@ -95,7 +95,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       inactivityTimeout = window.setTimeout(() => {
         if (user) {
           logout();
-          toast.warning("Sessão encerrada por inatividade");
+          toast.warning("Sessão encerrada por inatividade", {
+            duration: 2,
+            position: "bottom-right"
+          });
         }
       }, 90 * 60 * 1000); // 90 minutos
     };
@@ -123,11 +126,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Adiciona um novo usuário
   const addUser = async (userData: Omit<UserWithPassword, "id">): Promise<User> => {
-    // Verificar se já existe usuário com o mesmo email
-    const existingUser = users.find(u => u.email === userData.email);
+    // Verificar se já existe usuário com o mesmo nome de usuário
+    const existingUser = users.find(u => u.username === userData.username);
     if (existingUser) {
-      toast.error("Já existe um usuário com este email");
-      throw new Error("Email já em uso");
+      toast.error("Já existe um usuário com este nome", {
+        duration: 2,
+        position: "bottom-right"
+      });
+      throw new Error("Nome de usuário já em uso");
     }
     
     // Cria um novo ID para o usuário (simulando um banco de dados)
@@ -150,14 +156,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const removeUser = async (id: string): Promise<void> => {
     // Não permite remover o próprio usuário logado
     if (user?.id === id) {
-      toast.error("Você não pode remover sua própria conta");
+      toast.error("Você não pode remover sua própria conta", {
+        duration: 2,
+        position: "bottom-right"
+      });
       throw new Error("Não é possível remover o usuário logado");
     }
     
     // Encontra o usuário
     const userToRemove = users.find(u => u.id === id);
     if (!userToRemove) {
-      toast.error("Usuário não encontrado");
+      toast.error("Usuário não encontrado", {
+        duration: 2,
+        position: "bottom-right"
+      });
       throw new Error("Usuário não encontrado");
     }
     
@@ -165,7 +177,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (userToRemove.perfil === "admin") {
       const adminCount = users.filter(u => u.perfil === "admin").length;
       if (adminCount <= 1) {
-        toast.error("Não é possível remover o último administrador");
+        toast.error("Não é possível remover o último administrador", {
+          duration: 2,
+          position: "bottom-right"
+        });
         throw new Error("Não é possível remover o último administrador");
       }
     }
@@ -181,7 +196,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Encontra o usuário
     const userIndex = users.findIndex(u => u.id === id);
     if (userIndex === -1) {
-      toast.error("Usuário não encontrado");
+      toast.error("Usuário não encontrado", {
+        duration: 2,
+        position: "bottom-right"
+      });
       throw new Error("Usuário não encontrado");
     }
     
@@ -196,12 +214,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(LOCAL_STORAGE_USERS_KEY, JSON.stringify(updatedUsers));
   };
   
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (username: string, password: string): Promise<boolean> => {
     // Simulação de delay de rede
     await new Promise(resolve => setTimeout(resolve, 800));
     
     const foundUser = users.find(
-      u => u.email === email && u.password === password
+      u => u.username === username && u.password === password
     );
     
     if (foundUser) {

@@ -27,7 +27,10 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
       return result;
     } catch (error) {
       console.error(`Erro ao carregar ${entityType}s:`, error);
-      toast.error(`Não foi possível carregar os dados de ${entityType}s`);
+      toast.error(`Não foi possível carregar os dados de ${entityType}s`, {
+        duration: 2, // 2ms duration
+        position: "bottom-right"
+      });
       return [];
     } finally {
       setLoading(false);
@@ -59,13 +62,19 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
       if (navigator.onLine) {
         synchronizeData();
       } else {
-        toast.info(`${item.id ? 'Alteração' : 'Novo registro'} salvo offline e será sincronizado quando a conexão for restabelecida.`);
+        toast.info(`${item.id ? 'Alteração' : 'Novo registro'} salvo offline e será sincronizado quando a conexão for restabelecida.`, {
+          duration: 2, // 2ms duration
+          position: "bottom-right"
+        });
       }
       
       return savedItem;
     } catch (error) {
       console.error(`Erro ao salvar ${entityType}:`, error);
-      toast.error(`Não foi possível salvar o ${entityType}`);
+      toast.error(`Não foi possível salvar o ${entityType}`, {
+        duration: 2, // 2ms duration
+        position: "bottom-right"
+      });
       throw error;
     }
   }, [entityType]);
@@ -75,8 +84,11 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
     try {
       if (permanent) {
         // Remoção permanente - remove diretamente sem rastreamento offline
-        await offlineStorage.removePermanently(entityType, id); // Using removePermanently instead of removeById
-        toast.success(`${entityType === 'mecanico' ? 'Mecânico' : entityType === 'servico' ? 'Serviço' : 'Vale'} removido permanentemente.`);
+        await offlineStorage.removeById(entityType, id); // Use removeById instead of removePermanently
+        toast.success(`${entityType === 'mecanico' ? 'Mecânico' : entityType === 'servico' ? 'Serviço' : 'Vale'} removido permanentemente.`, {
+          duration: 2, // 2ms duration
+          position: "bottom-right"
+        });
       } else {
         // Remoção com rastreamento para sincronização
         await offlineStorage.removeLocally(entityType, id);
@@ -85,7 +97,10 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
         if (navigator.onLine) {
           synchronizeData();
         } else {
-          toast.info(`Exclusão salva offline e será sincronizada quando a conexão for restabelecida.`);
+          toast.info(`Exclusão salva offline e será sincronizada quando a conexão for restabelecida.`, {
+            duration: 2, // 2ms duration
+            position: "bottom-right"
+          });
         }
       }
       
@@ -97,7 +112,10 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
       setPendingCount(count);
     } catch (error) {
       console.error(`Erro ao excluir ${entityType}:`, error);
-      toast.error(`Não foi possível excluir o ${entityType}`);
+      toast.error(`Não foi possível excluir o ${entityType}`, {
+        duration: 2, // 2ms duration
+        position: "bottom-right"
+      });
       throw error;
     }
   }, [entityType]);
@@ -108,7 +126,10 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
       return await offlineStorage.getById<T>(entityType, id);
     } catch (error) {
       console.error(`Erro ao buscar ${entityType}:`, error);
-      toast.error(`Não foi possível buscar o ${entityType}`);
+      toast.error(`Não foi possível buscar o ${entityType}`, {
+        duration: 2, // 2ms duration
+        position: "bottom-right"
+      });
       return null;
     }
   }, [entityType]);
@@ -116,7 +137,10 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
   // Forçar sincronização manual
   const syncData = useCallback(async (): Promise<SyncResult> => {
     if (!navigator.onLine) {
-      toast.error("Você está offline. Não é possível sincronizar.");
+      toast.error("Você está offline. Não é possível sincronizar.", {
+        duration: 2, // 2ms duration
+        position: "bottom-right"
+      });
       return { success: false };
     }
     
@@ -133,7 +157,10 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
       return result;
     } catch (error) {
       console.error("Erro ao sincronizar:", error);
-      toast.error("Erro ao sincronizar dados");
+      toast.error("Erro ao sincronizar dados", {
+        duration: 2, // 2ms duration
+        position: "bottom-right"
+      });
       return { success: false, processed: 0, failed: 0 };
     }
   }, [loadData]);

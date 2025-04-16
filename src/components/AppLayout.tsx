@@ -20,8 +20,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "@/components/ModeToggle";
 import { 
-  Car, Home, Users, Wrench, Receipt, BarChart3, 
-  LogOut, CloudOff, CheckCircle, AlertCircle, CloudUpload 
+  Bike, Home, Users, Wrench, Receipt, BarChart3, 
+  LogOut, CloudOff, CheckCircle, CloudUpload, Settings
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -41,21 +41,33 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
       setIsOnline(online);
       
       if (online && pendingUploads > 0) {
-        toast.success(`Conexão restabelecida. Sincronizando ${pendingUploads} alterações...`);
+        toast.success(`Conexão restabelecida. Sincronizando ${pendingUploads} alterações...`, {
+          duration: 2,
+          position: "bottom-right"
+        });
         // Aqui chamaríamos a função de sincronização
         synchronizeData().then(() => {
-          toast.success("Sincronização concluída com sucesso!");
+          toast.success("Sincronização concluída com sucesso!", {
+            duration: 2,
+            position: "bottom-right"
+          });
           setPendingUploads(0);
         }).catch(error => {
-          toast.error("Erro na sincronização. Tente novamente mais tarde.");
+          toast.error("Erro na sincronização. Tente novamente mais tarde.", {
+            duration: 2,
+            position: "bottom-right"
+          });
           console.error("Sync error:", error);
         });
       } else if (online) {
-        toast.success("Conexão restabelecida.");
+        toast.success("Conexão restabelecida.", {
+          duration: 2,
+          position: "bottom-right"
+        });
       } else {
         toast.warning(
           "Você está offline. As alterações serão salvas localmente e sincronizadas quando a conexão for restabelecida.",
-          { duration: 2 }
+          { duration: 2, position: "bottom-right" }
         );
       }
     };
@@ -100,6 +112,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
     { title: "Serviços", icon: Wrench, path: "/servicos" },
     { title: "Vales", icon: Receipt, path: "/vales" },
     { title: "Relatórios", icon: BarChart3, path: "/relatorios" },
+    { title: "Usuários", icon: Settings, path: "/usuarios" }
   ];
 
   return (
@@ -108,8 +121,8 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
         <Sidebar className="border-r border-border">
           <SidebarHeader className="border-b border-border p-4">
             <div className="flex items-center space-x-2">
-              <Car className="h-6 w-6 text-primary" />
-              <h1 className="text-xl font-bold">Oficina Pro</h1>
+              <Bike className="h-6 w-6 text-primary" />
+              <h1 className="text-xl font-bold">MONARK MOTOPEÇAS</h1>
             </div>
           </SidebarHeader>
           <SidebarContent>
@@ -143,17 +156,31 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="text-xs font-medium">{user?.email?.charAt(0).toUpperCase()}</span>
+                    <span className="text-xs font-medium">{user?.username?.charAt(0).toUpperCase()}</span>
                   </div>
                   <div>
-                    <p className="text-sm font-medium">{user?.email}</p>
+                    <p className="text-sm font-medium">{user?.nome}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{user?.perfil}</p>
                   </div>
                 </div>
                 <ModeToggle />
               </div>
+              
+              {isOnline ? (
+                <Badge variant="outline" className="bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200 self-start">
+                  <CheckCircle className="mr-1 h-3 w-3" />
+                  Online
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 self-start">
+                  <CloudOff className="mr-1 h-3 w-3" />
+                  Offline
+                </Badge>
+              )}
+              
               <Button 
                 variant="outline" 
-                className="w-full" 
+                className="w-full text-red-500 hover:text-red-600 hover:bg-red-50" 
                 onClick={handleLogout}
               >
                 <LogOut className="mr-2 h-4 w-4" />
@@ -170,25 +197,6 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
               <h2 className="ml-4 text-xl font-semibold">
                 {menuItems.find(item => item.path === window.location.pathname)?.title || "Dashboard"}
               </h2>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              {!isOnline ? (
-                <Badge variant="outline" className="bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200">
-                  <CloudOff className="mr-1 h-3 w-3" />
-                  Offline
-                </Badge>
-              ) : pendingUploads > 0 ? (
-                <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200">
-                  <CloudUpload className="mr-1 h-3 w-3" />
-                  Sincronizando
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200">
-                  <CheckCircle className="mr-1 h-3 w-3" />
-                  Online
-                </Badge>
-              )}
             </div>
           </div>
           <main className="p-6">{children}</main>
