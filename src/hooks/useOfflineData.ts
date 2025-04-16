@@ -75,7 +75,7 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
     try {
       if (permanent) {
         // Remoção permanente - remove diretamente sem rastreamento offline
-        await offlineStorage.removeById(entityType, id); // Usando removeById em vez de removePermanently
+        await offlineStorage.removePermanently(entityType, id); // Using removePermanently instead of removeById
         toast.success(`${entityType === 'mecanico' ? 'Mecânico' : entityType === 'servico' ? 'Serviço' : 'Vale'} removido permanentemente.`);
       } else {
         // Remoção com rastreamento para sincronização

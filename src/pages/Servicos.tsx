@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PlusCircle, Pencil, Trash2, Search, X, Filter, Wrench, FileText, DollarSign, Phone, MessageSquare } from "lucide-react";
+import { PlusCircle, Pencil, Trash2, Search, Check, Clock, X, MessageSquare, Wrench, FileText, DollarSign, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -28,6 +28,7 @@ type Servico = {
   valor: number;
   telefone: string;
   status: StatusServico;
+  clienteAgradecido?: boolean; // Novo campo para controlar se o cliente já foi agradecido
 };
 
 // Mock de mecânicos (será substituído pela integração real com os mecânicos cadastrados)
@@ -52,6 +53,7 @@ const mockServicos: Servico[] = [
     valor: 250.0,
     telefone: "69912345678",
     status: "em_andamento",
+    clienteAgradecido: false,
   },
   {
     id: "2",
@@ -64,6 +66,7 @@ const mockServicos: Servico[] = [
     valor: 450.0,
     telefone: "69987654321",
     status: "em_andamento",
+    clienteAgradecido: false,
   },
   {
     id: "3",
@@ -76,6 +79,7 @@ const mockServicos: Servico[] = [
     valor: 180.0,
     telefone: "69998765432",
     status: "concluido",
+    clienteAgradecido: false,
   },
   {
     id: "4",
@@ -88,6 +92,7 @@ const mockServicos: Servico[] = [
     valor: 220.0,
     telefone: "69987651234",
     status: "concluido",
+    clienteAgradecido: true,
   },
   {
     id: "5",
@@ -100,11 +105,12 @@ const mockServicos: Servico[] = [
     valor: 350.0,
     telefone: "69912348765",
     status: "cancelado",
+    clienteAgradecido: false,
   },
 ];
 
 // Função para gerar o link de agradecimento via WhatsApp
-const gerarLinkWhatsApp = (telefone: string) => {
+const gerarLinkWhatsApp = (telefone: string, nomeMecanico: string) => {
   // Limpa o telefone para garantir que só tenha números
   const numeroLimpo = telefone.replace(/\D/g, '');
   
@@ -113,7 +119,7 @@ const gerarLinkWhatsApp = (telefone: string) => {
     return null;
   }
   
-  const mensagem = "Agradecemos%20imensamente%20pela%20sua%20prefer%C3%AAncia%20em%20realizar%20seu%20servi%C3%A7o%20na%20MONARK%20MOTOPE%C3%87AS%20E%20BICICLETARIA!%20%F0%9F%9A%B2%F0%9F%9A%A7%0A%0ALembramos%20que,%20segundo%20o%20C%C3%B3digo%20de%20Defesa%20do%20Consumidor%20%28CDC%29,%20a%20garantia%20para%20servi%C3%A7os%20e%20pe%C3%A7as%20%C3%A9%20de%2090%20dias.%20%F0%9F%93%9D%F0%9F%9A%96%0A%0AGuarde%20o%20comprovante%20fiscal%20e,%20caso%20haja%20algum%20defeito,%20n%C3%A3o%20hesite%20em%20nos%20procurar%20presencialmente%20para%20que%20possamos%20resolver%20o%20mais%20r%C3%A1pido%20poss%C3%ADvel!%20%F0%9F%98%8A%F0%9F%9A%90%0A%0AEstamos%20%C3%A0%20disposi%C3%A7%C3%A3o%20para%20atend%C3%AA-lo%20com%20todo%20o%20cuidado%20e%20qualidade%20que%20voc%C3%AA%20merece.%20%F0%9F%91%A8%20%F0%9F%9A%A7%F0%9F%99%99%0A%0AMONARK%20MOTOPE%C3%87AS%20E%20BICICLETARIA%20%E2%80%93%20Sempre%20ao%20seu%20lado!";
+  const mensagem = `Olá!%20%0AAgradeçemos%20por%20confiar%20na%20MONARK%20MOTOPEÇAS%20E%20BICICLETARIA%20para%20realizar%20seu%20serviço!%20%0AGuarde%20o%20seu%20comprovante%20fiscal,%20pois%20ele%20é%20essencial%20para%20acionar%20a%20garantia,%20caso%20necessário.%20%0ASe%20surgir%20qualquer%20problema,%20estaremos%20prontos%20para%20atendê-lo%20presencialmente%20com%20agilidade%20e%20atenção!%0AConte%20sempre%20conosco%20para%20o%20que%20precisar.%20Qualidade%20e%20compromisso%20fazem%20parte%20do%20nosso%20pós-venda.%20%0A%0AMONARK%20MOTOPEÇAS%20E%20BICICLETARIA%20–%20Sempre%20ao%20seu%20lado!%0ASeu%20serviço%20foi%20realizado%20pelo%20Mecânico%20${encodeURIComponent(nomeMecanico)}%20em%20caso%20de%20ter%20que%20acionar%20a%20garantia,%20procure-o%20presencialmente%20com%20o%20comprovante%20fornecido.`;
   
   return `https://wa.me/55${numeroLimpo}?text=${mensagem}`;
 };
@@ -136,7 +142,8 @@ const Servicos = () => {
     mecanicoId: "",
     valor: 0,
     telefone: "699",
-    status: "em_andamento"
+    status: "em_andamento",
+    clienteAgradecido: false
   });
 
   // Estado para controlar erros de validação
@@ -202,7 +209,35 @@ const Servicos = () => {
     });
   };
 
-  // Função para tratar a seleção do status
+  // Função para alternar o status do serviço
+  const alternarStatus = (servico: Servico) => {
+    let novoStatus: StatusServico;
+    
+    // Define a sequência de alternância: em_andamento -> concluido -> cancelado -> em_andamento
+    if (servico.status === "em_andamento") {
+      novoStatus = "concluido";
+    } else if (servico.status === "concluido") {
+      novoStatus = "cancelado";
+    } else {
+      novoStatus = "em_andamento";
+    }
+    
+    // Atualiza o status do serviço
+    const servicosAtualizados = servicos.map(s => 
+      s.id === servico.id ? { ...s, status: novoStatus } : s
+    );
+    
+    setServicos(servicosAtualizados);
+    
+    // Exibe mensagem de confirmação
+    toast.success(`Status do serviço atualizado para ${
+      novoStatus === "em_andamento" ? "Em andamento" : 
+      novoStatus === "concluido" ? "Concluído" : 
+      "Cancelado"
+    }`);
+  };
+
+  // Função para tratar a seleção do status no formulário
   const handleStatusChange = (status: StatusServico) => {
     setFormData({ ...formData, status });
   };
@@ -260,7 +295,8 @@ const Servicos = () => {
       // Adicionar novo serviço
       const novoServico: Servico = {
         ...formData as Omit<Servico, 'id'>,
-        id: Date.now().toString() // Simulação de ID
+        id: Date.now().toString(), // Simulação de ID
+        clienteAgradecido: false
       } as Servico;
       
       setServicos([...servicos, novoServico]);
@@ -307,15 +343,24 @@ const Servicos = () => {
       mecanicoId: "",
       valor: 0,
       telefone: "699",
-      status: "em_andamento"
+      status: "em_andamento",
+      clienteAgradecido: false
     });
     setErrors({});
   };
 
   // Função para agradecer ao cliente via WhatsApp
-  const agradecerCliente = (telefone: string) => {
-    const whatsappLink = gerarLinkWhatsApp(telefone);
+  const agradecerCliente = (servico: Servico) => {
+    const whatsappLink = gerarLinkWhatsApp(servico.telefone, servico.mecanicoNome);
+    
     if (whatsappLink) {
+      // Marca o cliente como agradecido
+      const servicosAtualizados = servicos.map(s => 
+        s.id === servico.id ? { ...s, clienteAgradecido: true } : s
+      );
+      setServicos(servicosAtualizados);
+      
+      // Abre o WhatsApp
       window.open(whatsappLink, '_blank');
     } else {
       toast.error("Número de telefone inválido para envio de mensagem");
@@ -340,6 +385,41 @@ const Servicos = () => {
     // Por enquanto, usamos os dados mock
     setMecanicos(mockMecanicos);
   }, []);
+  
+  // Função para renderizar os botões de status
+  const renderizarBotaoStatus = (servico: Servico) => {
+    return (
+      <Button
+        onClick={() => alternarStatus(servico)}
+        variant="ghost"
+        size="sm"
+        className={`flex items-center gap-1 ${
+          servico.status === "em_andamento"
+            ? "text-blue-500 hover:text-blue-700"
+            : servico.status === "concluido"
+            ? "text-green-500 hover:text-green-700"
+            : "text-red-500 hover:text-red-700"
+        }`}
+      >
+        {servico.status === "em_andamento" && (
+          <Clock className="h-4 w-4" />
+        )}
+        {servico.status === "concluido" && (
+          <Check className="h-4 w-4" />
+        )}
+        {servico.status === "cancelado" && (
+          <X className="h-4 w-4" />
+        )}
+        <span>
+          {servico.status === "em_andamento"
+            ? "Em andamento"
+            : servico.status === "concluido"
+            ? "Concluído"
+            : "Cancelado"}
+        </span>
+      </Button>
+    );
+  };
 
   return (
     <Layout>
@@ -414,21 +494,7 @@ const Servicos = () => {
                             <TableCell>{servico.mecanicoNome}</TableCell>
                             <TableCell>{formatarMoeda(servico.valor)}</TableCell>
                             <TableCell>
-                              <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  servico.status === "em_andamento"
-                                    ? "bg-blue-100 text-blue-800"
-                                    : servico.status === "concluido"
-                                    ? "bg-green-100 text-green-800"
-                                    : "bg-red-100 text-red-800"
-                                }`}
-                              >
-                                {servico.status === "em_andamento"
-                                  ? "Em andamento"
-                                  : servico.status === "concluido"
-                                  ? "Concluído"
-                                  : "Cancelado"}
-                              </span>
+                              {renderizarBotaoStatus(servico)}
                             </TableCell>
                             <TableCell className="text-right">
                               <Button
@@ -442,10 +508,11 @@ const Servicos = () => {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => agradecerCliente(servico.telefone)}
+                                  onClick={() => agradecerCliente(servico)}
                                   title="Agradecer ao Cliente"
+                                  className={servico.clienteAgradecido ? "text-red-500" : "text-green-500"}
                                 >
-                                  <MessageSquare className="h-4 w-4 text-green-500" />
+                                  <MessageSquare className="h-4 w-4" />
                                 </Button>
                               )}
                               <Button
@@ -468,7 +535,6 @@ const Servicos = () => {
             <TabsContent value="em_andamento" className="mt-0">
               <Card>
                 <CardContent className="p-0">
-                  {/* O mesmo conteúdo da tabela será exibido aqui, mas filtrado */}
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -499,9 +565,7 @@ const Servicos = () => {
                             <TableCell>{servico.mecanicoNome}</TableCell>
                             <TableCell>{formatarMoeda(servico.valor)}</TableCell>
                             <TableCell>
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                Em andamento
-                              </span>
+                              {renderizarBotaoStatus(servico)}
                             </TableCell>
                             <TableCell className="text-right">
                               <Button
@@ -529,7 +593,6 @@ const Servicos = () => {
             </TabsContent>
 
             <TabsContent value="concluido" className="mt-0">
-              {/* Tabela de Serviços Concluídos */}
               <Card>
                 <CardContent className="p-0">
                   <Table>
@@ -562,9 +625,7 @@ const Servicos = () => {
                             <TableCell>{servico.mecanicoNome}</TableCell>
                             <TableCell>{formatarMoeda(servico.valor)}</TableCell>
                             <TableCell>
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                Concluído
-                              </span>
+                              {renderizarBotaoStatus(servico)}
                             </TableCell>
                             <TableCell className="text-right">
                               <Button
@@ -577,10 +638,11 @@ const Servicos = () => {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => agradecerCliente(servico.telefone)}
+                                onClick={() => agradecerCliente(servico)}
                                 title="Agradecer ao Cliente"
+                                className={servico.clienteAgradecido ? "text-red-500" : "text-green-500"}
                               >
-                                <MessageSquare className="h-4 w-4 text-green-500" />
+                                <MessageSquare className="h-4 w-4" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -600,7 +662,6 @@ const Servicos = () => {
             </TabsContent>
 
             <TabsContent value="cancelado" className="mt-0">
-              {/* Tabela de Serviços Cancelados */}
               <Card>
                 <CardContent className="p-0">
                   <Table>
@@ -633,9 +694,7 @@ const Servicos = () => {
                             <TableCell>{servico.mecanicoNome}</TableCell>
                             <TableCell>{formatarMoeda(servico.valor)}</TableCell>
                             <TableCell>
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                Cancelado
-                              </span>
+                              {renderizarBotaoStatus(servico)}
                             </TableCell>
                             <TableCell className="text-right">
                               <Button
