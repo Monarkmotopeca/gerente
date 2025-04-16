@@ -1,8 +1,7 @@
-
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { Bike, Wrench, Users, Receipt, Clock, Calendar, Tool, CheckCircle, AlertTriangle } from "lucide-react";
+import { Bike, Wrench, Users, Receipt, Clock, Calendar, CheckCircle, AlertTriangle } from "lucide-react";
 
 // Mock de dados para o dashboard de uma oficina de motos e bicicletas
 const mockData = {
@@ -85,7 +84,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="flex items-center">
-              <Tool className="h-8 w-8 text-purple-500 mr-3" />
+              <Users className="h-8 w-8 text-purple-500 mr-3" />
               <span className="text-3xl font-bold">{data.totalMecanicos}</span>
             </div>
           </CardContent>

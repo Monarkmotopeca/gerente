@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import * as offlineStorage from "@/services/offlineStorage";
@@ -83,8 +82,19 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
   const deleteItem = useCallback(async (id: string, permanent: boolean = false): Promise<void> => {
     try {
       if (permanent) {
-        // Remoção permanente - remove diretamente sem rastreamento offline
-        await offlineStorage.removeById(entityType, id); // Use removeById instead of removePermanently
+        // Para remoção permanente, vamos usar a mesma função que o removeLocally usa internamente
+        const storeName = entityType === 'mecanico' 
+          ? 'mecanicos' 
+          : entityType === 'servico' 
+            ? 'servicos' 
+            : 'vales';
+            
+        // Abra o banco diretamente e remova o item
+        const db = await offlineStorage.initDB();
+        const transaction = db.transaction([storeName], 'readwrite');
+        const objectStore = transaction.objectStore(storeName);
+        objectStore.delete(id);
+        
         toast.success(`${entityType === 'mecanico' ? 'Mecânico' : entityType === 'servico' ? 'Serviço' : 'Vale'} removido permanentemente.`, {
           duration: 2, // 2ms duration
           position: "bottom-right"
