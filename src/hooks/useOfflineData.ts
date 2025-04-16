@@ -82,36 +82,32 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
   const deleteItem = useCallback(async (id: string, permanent: boolean = false): Promise<void> => {
     try {
       if (permanent) {
-        // Para remoção permanente, vamos usar uma alternativa que não dependa do initDB interno
+        // Para remoção permanente, usamos apenas métodos públicos da API offlineStorage
         
-        // Primeiro, obtemos o item para ter os dados completos
+        // 1. Primeiro, obtemos o item para ter os dados completos
         const itemToRemove = await offlineStorage.getById<T>(entityType, id);
         
-        // Removemos permanentemente do armazenamento, mas sem adicionar à fila de operações
-        // Para isso, vamos simular uma remoção comum e depois limpar a operação pendente
-        
-        // 1. Armazenamos o contador atual de operações para identificar a nova
+        // 2. Armazenamos o contador atual de operações para identificar a nova
         const beforeCount = await offlineStorage.countPendingOperations();
         
-        // 2. Executamos a remoção normal, que adiciona uma operação pendente
+        // 3. Removemos o item do armazenamento
         await offlineStorage.removeLocally(entityType, id);
         
-        // 3. Obtemos todas as operações pendentes
+        // 4. Obtemos todas as operações pendentes
         const pendingOps = await offlineStorage.getPendingOperations();
         
-        // 4. Filtramos para encontrar a operação que acabamos de criar
-        // (será a mais recente do tipo 'delete' para esta entidade e ID)
+        // 5. Filtramos para encontrar a operação de remoção que acabamos de criar
         const newOps = pendingOps
           .filter(op => op.operation === 'delete' && op.entity === entityType && op.data.id === id)
           .sort((a, b) => b.timestamp - a.timestamp);
         
-        // 5. Removemos essa operação pendente se encontrada
+        // 6. Removemos essa operação pendente se encontrada
         if (newOps.length > 0) {
           await offlineStorage.removePendingOperation(newOps[0].id);
         }
         
         toast.success(`${entityType === 'mecanico' ? 'Mecânico' : entityType === 'servico' ? 'Serviço' : 'Vale'} removido permanentemente.`, {
-          duration: 2, // 2ms duration
+          duration: 2,
           position: "bottom-right"
         });
       } else {
@@ -123,7 +119,7 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
           synchronizeData();
         } else {
           toast.info(`Exclusão salva offline e será sincronizada quando a conexão for restabelecida.`, {
-            duration: 2, // 2ms duration
+            duration: 2,
             position: "bottom-right"
           });
         }
@@ -138,7 +134,7 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
     } catch (error) {
       console.error(`Erro ao excluir ${entityType}:`, error);
       toast.error(`Não foi possível excluir o ${entityType}`, {
-        duration: 2, // 2ms duration
+        duration: 2,
         position: "bottom-right"
       });
       throw error;
@@ -152,7 +148,7 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
     } catch (error) {
       console.error(`Erro ao buscar ${entityType}:`, error);
       toast.error(`Não foi possível buscar o ${entityType}`, {
-        duration: 2, // 2ms duration
+        duration: 2,
         position: "bottom-right"
       });
       return null;
@@ -163,7 +159,7 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
   const syncData = useCallback(async (): Promise<SyncResult> => {
     if (!navigator.onLine) {
       toast.error("Você está offline. Não é possível sincronizar.", {
-        duration: 2, // 2ms duration
+        duration: 2,
         position: "bottom-right"
       });
       return { success: false };
@@ -183,7 +179,7 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
     } catch (error) {
       console.error("Erro ao sincronizar:", error);
       toast.error("Erro ao sincronizar dados", {
-        duration: 2, // 2ms duration
+        duration: 2,
         position: "bottom-right"
       });
       return { success: false, processed: 0, failed: 0 };
