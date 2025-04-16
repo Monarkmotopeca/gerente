@@ -82,18 +82,33 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
   const deleteItem = useCallback(async (id: string, permanent: boolean = false): Promise<void> => {
     try {
       if (permanent) {
-        // Para remoção permanente, vamos usar a mesma função que o removeLocally usa internamente
-        const storeName = entityType === 'mecanico' 
-          ? 'mecanicos' 
-          : entityType === 'servico' 
-            ? 'servicos' 
-            : 'vales';
-            
-        // Abra o banco diretamente e remova o item
-        const db = await offlineStorage.initDB();
-        const transaction = db.transaction([storeName], 'readwrite');
-        const objectStore = transaction.objectStore(storeName);
-        objectStore.delete(id);
+        // Para remoção permanente, vamos usar uma alternativa que não dependa do initDB interno
+        
+        // Primeiro, obtemos o item para ter os dados completos
+        const itemToRemove = await offlineStorage.getById<T>(entityType, id);
+        
+        // Removemos permanentemente do armazenamento, mas sem adicionar à fila de operações
+        // Para isso, vamos simular uma remoção comum e depois limpar a operação pendente
+        
+        // 1. Armazenamos o contador atual de operações para identificar a nova
+        const beforeCount = await offlineStorage.countPendingOperations();
+        
+        // 2. Executamos a remoção normal, que adiciona uma operação pendente
+        await offlineStorage.removeLocally(entityType, id);
+        
+        // 3. Obtemos todas as operações pendentes
+        const pendingOps = await offlineStorage.getPendingOperations();
+        
+        // 4. Filtramos para encontrar a operação que acabamos de criar
+        // (será a mais recente do tipo 'delete' para esta entidade e ID)
+        const newOps = pendingOps
+          .filter(op => op.operation === 'delete' && op.entity === entityType && op.data.id === id)
+          .sort((a, b) => b.timestamp - a.timestamp);
+        
+        // 5. Removemos essa operação pendente se encontrada
+        if (newOps.length > 0) {
+          await offlineStorage.removePendingOperation(newOps[0].id);
+        }
         
         toast.success(`${entityType === 'mecanico' ? 'Mecânico' : entityType === 'servico' ? 'Serviço' : 'Vale'} removido permanentemente.`, {
           duration: 2, // 2ms duration
