@@ -1,7 +1,8 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import * as offlineStorage from "@/services/offlineStorage";
-import { synchronizeData } from "@/services/syncService";
+import * as supabaseService from "@/services/supabaseService";
+import { supabase } from "@/integrations/supabase/client";
 
 // Interface para o resultado da sincronização
 interface SyncResult {
@@ -10,24 +11,23 @@ interface SyncResult {
   failed?: number;
 }
 
-// Hook genérico para lidar com qualquer tipo de entidade offline
-export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' | 'servico' | 'vale') {
+// Hook genérico para lidar com qualquer tipo de entidade no Supabase
+export function useOfflineData<T extends { id: string }>(entityType: 'mecanicos' | 'servicos' | 'vales') {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pendingCount, setPendingCount] = useState(0);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // Carregar todos os registros do armazenamento local
+  // Carregar todos os registros do Supabase
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await offlineStorage.getAll<T>(entityType);
+      const result = await supabaseService.getAll<T>(entityType);
       setData(result);
       return result;
     } catch (error) {
-      console.error(`Erro ao carregar ${entityType}s:`, error);
-      toast.error(`Não foi possível carregar os dados de ${entityType}s`, {
-        duration: 2, // 2ms duration
+      console.error(`Erro ao carregar ${entityType}:`, error);
+      toast.error(`Não foi possível carregar os dados de ${entityType}`, {
+        duration: 2,
         position: "bottom-right"
       });
       return [];
@@ -36,10 +36,18 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
     }
   }, [entityType]);
 
-  // Salvar uma entidade localmente
+  // Salvar uma entidade
   const saveItem = useCallback(async (item: T): Promise<T> => {
     try {
-      const savedItem = await offlineStorage.saveLocally<T>(entityType, item);
+      if (!navigator.onLine) {
+        toast.error("Você está offline. Não é possível salvar dados.", {
+          duration: 2,
+          position: "bottom-right"
+        });
+        throw new Error("Offline");
+      }
+      
+      const savedItem = await supabaseService.saveItem<T>(entityType, item);
       
       // Atualiza o estado local
       setData(prev => {
@@ -53,84 +61,42 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
         }
       });
       
-      // Conta as operações pendentes
-      const count = await offlineStorage.countPendingOperations();
-      setPendingCount(count);
-      
-      // Tenta sincronizar se estiver online
-      if (navigator.onLine) {
-        synchronizeData();
-      } else {
-        toast.info(`${item.id ? 'Alteração' : 'Novo registro'} salvo offline e será sincronizado quando a conexão for restabelecida.`, {
-          duration: 2, // 2ms duration
-          position: "bottom-right"
-        });
-      }
+      toast.success(item.id ? 'Item atualizado com sucesso.' : 'Item criado com sucesso.', {
+        duration: 2,
+        position: "bottom-right"
+      });
       
       return savedItem;
     } catch (error) {
       console.error(`Erro ao salvar ${entityType}:`, error);
       toast.error(`Não foi possível salvar o ${entityType}`, {
-        duration: 2, // 2ms duration
+        duration: 2,
         position: "bottom-right"
       });
       throw error;
     }
   }, [entityType]);
 
-  // Excluir uma entidade permanentemente
+  // Excluir uma entidade
   const deleteItem = useCallback(async (id: string, permanent: boolean = false): Promise<void> => {
     try {
-      if (permanent) {
-        // Para remoção permanente, usamos apenas métodos públicos da API offlineStorage
-        
-        // 1. Primeiro, obtemos o item para ter os dados completos
-        const itemToRemove = await offlineStorage.getById<T>(entityType, id);
-        
-        // 2. Armazenamos o contador atual de operações para identificar a nova
-        const beforeCount = await offlineStorage.countPendingOperations();
-        
-        // 3. Removemos o item do armazenamento
-        await offlineStorage.removeLocally(entityType, id);
-        
-        // 4. Obtemos todas as operações pendentes
-        const pendingOps = await offlineStorage.getPendingOperations();
-        
-        // 5. Filtramos para encontrar a operação de remoção que acabamos de criar
-        const newOps = pendingOps
-          .filter(op => op.operation === 'delete' && op.entity === entityType && op.data.id === id)
-          .sort((a, b) => b.timestamp - a.timestamp);
-        
-        // 6. Removemos essa operação pendente se encontrada
-        if (newOps.length > 0) {
-          await offlineStorage.removePendingOperation(newOps[0].id);
-        }
-        
-        toast.success(`${entityType === 'mecanico' ? 'Mecânico' : entityType === 'servico' ? 'Serviço' : 'Vale'} removido permanentemente.`, {
+      if (!navigator.onLine) {
+        toast.error("Você está offline. Não é possível excluir dados.", {
           duration: 2,
           position: "bottom-right"
         });
-      } else {
-        // Remoção com rastreamento para sincronização
-        await offlineStorage.removeLocally(entityType, id);
-        
-        // Tenta sincronizar se estiver online
-        if (navigator.onLine) {
-          synchronizeData();
-        } else {
-          toast.info(`Exclusão salva offline e será sincronizada quando a conexão for restabelecida.`, {
-            duration: 2,
-            position: "bottom-right"
-          });
-        }
+        throw new Error("Offline");
       }
+      
+      await supabaseService.removeItem(entityType, id);
       
       // Atualiza o estado local
       setData(prev => prev.filter(item => item.id !== id));
       
-      // Conta as operações pendentes
-      const count = await offlineStorage.countPendingOperations();
-      setPendingCount(count);
+      toast.success(`${entityType === 'mecanicos' ? 'Mecânico' : entityType === 'servicos' ? 'Serviço' : 'Vale'} removido com sucesso.`, {
+        duration: 2,
+        position: "bottom-right"
+      });
     } catch (error) {
       console.error(`Erro ao excluir ${entityType}:`, error);
       toast.error(`Não foi possível excluir o ${entityType}`, {
@@ -144,7 +110,7 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
   // Buscar um item específico
   const getItem = useCallback(async (id: string): Promise<T | null> => {
     try {
-      return await offlineStorage.getById<T>(entityType, id);
+      return await supabaseService.getById<T>(entityType, id);
     } catch (error) {
       console.error(`Erro ao buscar ${entityType}:`, error);
       toast.error(`Não foi possível buscar o ${entityType}`, {
@@ -155,41 +121,33 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
     }
   }, [entityType]);
 
-  // Forçar sincronização manual
-  const syncData = useCallback(async (): Promise<SyncResult> => {
-    if (!navigator.onLine) {
-      toast.error("Você está offline. Não é possível sincronizar.", {
-        duration: 2,
-        position: "bottom-right"
-      });
-      return { success: false };
-    }
-    
-    try {
-      const result = await synchronizeData();
-      
-      // Atualiza a contagem de pendências
-      const count = await offlineStorage.countPendingOperations();
-      setPendingCount(count);
-      
-      // Recarrega os dados após sincronização
-      await loadData();
-      
-      return result;
-    } catch (error) {
-      console.error("Erro ao sincronizar:", error);
-      toast.error("Erro ao sincronizar dados", {
-        duration: 2,
-        position: "bottom-right"
-      });
-      return { success: false, processed: 0, failed: 0 };
-    }
-  }, [loadData]);
+  // Configurar atualização em tempo real
+  const setupRealtimeSubscription = useCallback(() => {
+    const channel = supabase
+      .channel('public:changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: entityType },
+        (payload) => {
+          // Recarregar dados quando houver mudanças
+          loadData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [entityType, loadData]);
 
   // Monitorar o status online/offline
   useEffect(() => {
     const handleOnlineStatus = () => {
       setIsOnline(navigator.onLine);
+      // Quando voltar a ficar online, recarrega os dados
+      if (navigator.onLine) {
+        loadData();
+      }
     };
     
     window.addEventListener("online", handleOnlineStatus);
@@ -199,37 +157,28 @@ export function useOfflineData<T extends { id: string }>(entityType: 'mecanico' 
       window.removeEventListener("online", handleOnlineStatus);
       window.removeEventListener("offline", handleOnlineStatus);
     };
-  }, []);
+  }, [loadData]);
 
-  // Carregar os dados iniciais e configurar contador de pendências
+  // Carregar os dados iniciais e configurar tempo real
   useEffect(() => {
     loadData();
     
-    // Verifica operações pendentes
-    const checkPending = async () => {
-      const count = await offlineStorage.countPendingOperations();
-      setPendingCount(count);
-    };
-    
-    checkPending();
-    
-    // Configura um intervalo para verificar pendências
-    const interval = setInterval(checkPending, 30000); // a cada 30 segundos
+    // Configurar inscrição para atualizações em tempo real
+    const unsubscribe = setupRealtimeSubscription();
     
     return () => {
-      clearInterval(interval);
+      unsubscribe();
     };
-  }, [loadData]);
+  }, [loadData, setupRealtimeSubscription]);
 
   return {
     data,
     loading,
-    pendingCount,
     isOnline,
     loadData,
     saveItem,
     deleteItem,
     getItem,
-    syncData
+    // Não precisamos mais do pendingCount e syncData, pois agora as operações são síncronas com o Supabase
   };
 }

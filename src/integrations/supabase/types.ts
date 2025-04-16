@@ -9,7 +9,130 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      mecanicos: {
+        Row: {
+          created_at: string
+          email: string | null
+          especialidade: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          telefone: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          especialidade?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          telefone?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          especialidade?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          telefone?: string | null
+        }
+        Relationships: []
+      }
+      servicos: {
+        Row: {
+          cliente: string
+          cliente_agradecido: boolean | null
+          created_at: string
+          data: string
+          descricao: string
+          id: string
+          mecanico_id: string | null
+          mecanico_nome: string
+          status: string
+          telefone: string | null
+          valor: number
+          veiculo: string
+        }
+        Insert: {
+          cliente: string
+          cliente_agradecido?: boolean | null
+          created_at?: string
+          data?: string
+          descricao: string
+          id?: string
+          mecanico_id?: string | null
+          mecanico_nome: string
+          status: string
+          telefone?: string | null
+          valor?: number
+          veiculo: string
+        }
+        Update: {
+          cliente?: string
+          cliente_agradecido?: boolean | null
+          created_at?: string
+          data?: string
+          descricao?: string
+          id?: string
+          mecanico_id?: string | null
+          mecanico_nome?: string
+          status?: string
+          telefone?: string | null
+          valor?: number
+          veiculo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "servicos_mecanico_id_fkey"
+            columns: ["mecanico_id"]
+            isOneToOne: false
+            referencedRelation: "mecanicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vales: {
+        Row: {
+          created_at: string
+          data: string
+          descricao: string | null
+          id: string
+          mecanico_id: string | null
+          mecanico_nome: string
+          status: string
+          valor: number
+        }
+        Insert: {
+          created_at?: string
+          data?: string
+          descricao?: string | null
+          id?: string
+          mecanico_id?: string | null
+          mecanico_nome: string
+          status: string
+          valor?: number
+        }
+        Update: {
+          created_at?: string
+          data?: string
+          descricao?: string | null
+          id?: string
+          mecanico_id?: string | null
+          mecanico_nome?: string
+          status?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vales_mecanico_id_fkey"
+            columns: ["mecanico_id"]
+            isOneToOne: false
+            referencedRelation: "mecanicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { CloudOff, CheckCircle, Plus, RefreshCw, Edit, Trash2, Search, CloudUpload } from "lucide-react";
+import { CloudOff, CheckCircle, Plus, RefreshCw, Edit, Trash2, Search } from "lucide-react";
 
 interface Mecanico {
   id: string;
@@ -17,15 +17,15 @@ interface Mecanico {
   telefone: string;
   email: string;
   observacoes: string;
-  createdAt: number;
+  created_at?: string; // Modificado para corresponder ao formato do Supabase
 }
 
 const Mecanicos = () => {
-  const { data: mecanicos, loading, isOnline, pendingCount, saveItem, deleteItem, syncData } = useOfflineData<Mecanico>('mecanico');
+  const { data: mecanicos, loading, isOnline, saveItem, deleteItem } = useOfflineData<Mecanico>('mecanicos');
   const [searchTerm, setSearchTerm] = useState("");
   const [open, setOpen] = useState(false);
   const [editingMecanico, setEditingMecanico] = useState<Mecanico | null>(null);
-  const [formData, setFormData] = useState<Omit<Mecanico, 'id' | 'createdAt'>>({
+  const [formData, setFormData] = useState<Omit<Mecanico, 'id' | 'created_at'>>({
     nome: "",
     especialidade: "",
     telefone: "",
@@ -74,8 +74,7 @@ const Mecanicos = () => {
     try {
       const mecanicoData: Mecanico = {
         id: editingMecanico?.id || "",
-        ...formData,
-        createdAt: editingMecanico?.createdAt || Date.now()
+        ...formData
       };
       
       await saveItem(mecanicoData);
@@ -102,21 +101,9 @@ const Mecanicos = () => {
     }
   };
 
-  const handleSync = async () => {
-    if (!isOnline) {
-      toast.error("Você está offline. Não é possível sincronizar agora.");
-      return;
-    }
-    
-    const result = await syncData();
-    if (result.success && result.processed !== undefined) {
-      toast.success(`Sincronização concluída! ${result.processed} alterações enviadas.`);
-    } else if (result.processed !== undefined && result.processed > 0 && result.failed !== undefined) {
-      toast.warning(`Sincronização parcial: ${result.failed} alterações não sincronizadas.`);
-    } else {
-      toast.error("Falha na sincronização. Tente novamente mais tarde.");
-    }
-  };
+  // O restante do componente permanece o mesmo, mas com algumas adaptações:
+  // - Removemos os botões e lógica de sincronização, pois agora já estamos sempre sincronizados com o Supabase
+  // - Adaptamos a formatação de data para usar o formato do Supabase
 
   return (
     <div className="space-y-6">
@@ -126,11 +113,6 @@ const Mecanicos = () => {
           {!isOnline && (
             <div className="rounded-full bg-yellow-100 dark:bg-yellow-900/20 p-1 text-yellow-800 dark:text-yellow-200">
               <CloudOff className="h-5 w-5" />
-            </div>
-          )}
-          {isOnline && pendingCount > 0 && (
-            <div className="rounded-full bg-blue-100 dark:bg-blue-900/20 p-1 text-blue-800 dark:text-blue-200">
-              <CloudUpload className="h-5 w-5" />
             </div>
           )}
         </div>
@@ -145,16 +127,10 @@ const Mecanicos = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Button onClick={openNewMecanico}>
+          <Button onClick={openNewMecanico} disabled={!isOnline}>
             <Plus className="mr-2 h-4 w-4" />
             Novo Mecânico
           </Button>
-          {pendingCount > 0 && (
-            <Button variant="outline" onClick={handleSync} disabled={!isOnline}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Sincronizar ({pendingCount})
-            </Button>
-          )}
         </div>
       </div>
 
@@ -185,6 +161,7 @@ const Mecanicos = () => {
                       variant="ghost" 
                       size="icon" 
                       onClick={() => openEditMecanico(mecanico)}
+                      disabled={!isOnline}
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -192,6 +169,7 @@ const Mecanicos = () => {
                       variant="ghost" 
                       size="icon" 
                       onClick={() => handleDelete(mecanico.id, mecanico.nome)}
+                      disabled={!isOnline}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -214,7 +192,7 @@ const Mecanicos = () => {
                 </div>
               </CardContent>
               <CardFooter className="pt-2 text-xs text-muted-foreground">
-                Cadastrado em: {new Date(mecanico.createdAt).toLocaleDateString()}
+                Cadastrado em: {mecanico.created_at ? new Date(mecanico.created_at).toLocaleDateString() : '-'}
               </CardFooter>
             </Card>
           ))}
@@ -293,7 +271,7 @@ const Mecanicos = () => {
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit">
+              <Button type="submit" disabled={!isOnline}>
                 {editingMecanico ? "Atualizar" : "Cadastrar"}
               </Button>
             </DialogFooter>

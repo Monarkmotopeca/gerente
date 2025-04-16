@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,21 +10,21 @@ import { PlusCircle, Pencil, Trash2, Search, X, FileText, AlertTriangle } from "
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Textarea } from "@/components/ui/textarea";
+import { useOfflineData } from "@/hooks/useOfflineData";
 
-// Tipos para vales
+// Adaptação dos tipos para Supabase
 type Vale = {
   id: string;
   data: string;
-  cliente: string;
-  mecanico: string;
-  produto: string;
-  quantidade: number;
-  valorUnitario: number;
-  total: number;
-  observacao: string;
+  mecanico_id: string;
+  mecanico_nome: string;
+  valor: number;
+  descricao: string;
+  status: 'pendente' | 'pago' | 'cancelado';
+  created_at?: string;
 };
 
-// Tipos para estoque
+// Tipo para produtos em estoque (posteriormente será adaptado para uma tabela no Supabase)
 type ItemEstoque = {
   id: string;
   nome: string;
@@ -34,7 +33,7 @@ type ItemEstoque = {
   estoqueMinimo: number;
 };
 
-// Mock de produtos em estoque
+// Mock de produtos em estoque (posteriormente será substituído por uma tabela no Supabase)
 const mockEstoque: ItemEstoque[] = [
   { id: "1", nome: "Óleo de Motor 5W30", quantidade: 15, valorUnitario: 35.9, estoqueMinimo: 5 },
   { id: "2", nome: "Filtro de Óleo", quantidade: 12, valorUnitario: 25.5, estoqueMinimo: 4 },
@@ -44,61 +43,29 @@ const mockEstoque: ItemEstoque[] = [
   { id: "6", nome: "Vela de Ignição", quantidade: 20, valorUnitario: 18.9, estoqueMinimo: 4 },
 ];
 
-// Mock de vales
-const mockVales: Vale[] = [
-  {
-    id: "1",
-    data: "2025-06-01",
-    cliente: "João Silva",
-    mecanico: "Carlos Pereira",
-    produto: "Óleo de Motor 5W30",
-    quantidade: 1,
-    valorUnitario: 35.9,
-    total: 35.9,
-    observacao: "Troca de óleo completa",
-  },
-  {
-    id: "2",
-    data: "2025-05-30",
-    cliente: "Maria Santos",
-    mecanico: "Roberto Silva",
-    produto: "Filtro de Óleo",
-    quantidade: 1,
-    valorUnitario: 25.5,
-    total: 25.5,
-    observacao: "Para revisão",
-  },
-  {
-    id: "3",
-    data: "2025-05-29",
-    cliente: "Pedro Oliveira",
-    mecanico: "Antônio Santos",
-    produto: "Pastilha de Freio",
-    quantidade: 2,
-    valorUnitario: 120.0,
-    total: 240.0,
-    observacao: "Dianteira e traseira",
-  },
-];
-
 const Vales = () => {
-  const [vales, setVales] = useState<Vale[]>(mockVales);
+  const { data: vales, loading: loadingVales, saveItem: saveVale, deleteItem: deleteVale } = useOfflineData<Vale>('vales');
+  const { data: mecanicos, loading: loadingMecanicos } = useOfflineData<{ id: string; nome: string }>('mecanicos');
+  
   const [estoque, setEstoque] = useState<ItemEstoque[]>(mockEstoque);
-  const [filteredVales, setFilteredVales] = useState<Vale[]>(mockVales);
+  const [filteredVales, setFilteredVales] = useState<Vale[]>([]);
   const [isValeDialogOpen, setIsValeDialogOpen] = useState(false);
   const [isEstoqueDialogOpen, setIsEstoqueDialogOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [valeEmEdicao, setValeEmEdicao] = useState<Vale | null>(null);
   const [itemEstoqueEmEdicao, setItemEstoqueEmEdicao] = useState<ItemEstoque | null>(null);
-  const [valeFormData, setValeFormData] = useState<Omit<Vale, "id" | "total">>({
+  
+  // Estado para o formulário de vale
+  const [valeFormData, setValeFormData] = useState<Omit<Vale, "id" | "created_at">>({
     data: new Date().toISOString().split("T")[0],
-    cliente: "",
-    mecanico: "",
-    produto: "",
-    quantidade: 1,
-    valorUnitario: 0,
-    observacao: "",
+    mecanico_id: "",
+    mecanico_nome: "",
+    valor: 0,
+    descricao: "",
+    status: "pendente"
   });
+  
+  // Estado para o formulário de estoque
   const [estoqueFormData, setEstoqueFormData] = useState<Omit<ItemEstoque, "id">>({
     nome: "",
     quantidade: 0,
@@ -110,28 +77,22 @@ const Vales = () => {
   const isAdmin = user?.perfil === "admin";
   const isUsuario = user?.perfil === "usuario";
   
-  // Calcular o valor total com base na quantidade e valor unitário
-  const calcularTotal = (quantidade: number, valorUnitario: number) => {
-    return quantidade * valorUnitario;
-  };
+  // Atualizar filteredVales quando vales mudarem
+  useEffect(() => {
+    if (searchTerm) {
+      const filtered = vales.filter(vale => 
+        vale.mecanico_nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        vale.descricao.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredVales(filtered);
+    } else {
+      setFilteredVales(vales);
+    }
+  }, [vales, searchTerm]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const term = e.target.value;
     setSearchTerm(term);
-    
-    if (!term.trim()) {
-      setFilteredVales(vales);
-      return;
-    }
-    
-    const filtered = vales.filter(
-      vale =>
-        vale.cliente.toLowerCase().includes(term.toLowerCase()) ||
-        vale.mecanico.toLowerCase().includes(term.toLowerCase()) ||
-        vale.produto.toLowerCase().includes(term.toLowerCase())
-    );
-    
-    setFilteredVales(filtered);
   };
 
   const handleValeInputChange = (
@@ -139,22 +100,25 @@ const Vales = () => {
   ) => {
     const { name, value } = e.target;
     
-    if (name === "produto") {
-      const produtoSelecionado = estoque.find(item => item.nome === value);
-      if (produtoSelecionado) {
-        setValeFormData(prev => ({
-          ...prev,
-          [name]: value,
-          valorUnitario: produtoSelecionado.valorUnitario,
-        }));
-      } else {
-        setValeFormData(prev => ({ ...prev, [name]: value }));
-      }
-    } else if (name === "quantidade" || name === "valorUnitario") {
-      setValeFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
+    if (name === "valor") {
+      // Remove qualquer caractere que não seja número ou vírgula
+      const numericValue = value.replace(/[^\d,]/g, '');
+      // Substitui vírgula por ponto para realizar cálculos
+      const formattedValue = numericValue.replace(',', '.');
+      setValeFormData({ ...valeFormData, [name]: parseFloat(formattedValue) || 0 });
     } else {
-      setValeFormData(prev => ({ ...prev, [name]: value }));
+      setValeFormData({ ...valeFormData, [name]: value });
     }
+  };
+
+  // Função para tratar a seleção do mecânico
+  const handleMecanicoChange = (mecanicoId: string) => {
+    const mecanicoSelecionado = mecanicos.find(m => m.id === mecanicoId);
+    setValeFormData({ 
+      ...valeFormData, 
+      mecanico_id: mecanicoId, 
+      mecanico_nome: mecanicoSelecionado ? mecanicoSelecionado.nome : "" 
+    });
   };
 
   const handleEstoqueInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -170,12 +134,11 @@ const Vales = () => {
   const resetValeForm = () => {
     setValeFormData({
       data: new Date().toISOString().split("T")[0],
-      cliente: "",
-      mecanico: "",
-      produto: "",
-      quantidade: 1,
-      valorUnitario: 0,
-      observacao: "",
+      mecanico_id: "",
+      mecanico_nome: "",
+      valor: 0,
+      descricao: "",
+      status: "pendente"
     });
     setValeEmEdicao(null);
   };
@@ -195,12 +158,11 @@ const Vales = () => {
       setValeEmEdicao(vale);
       setValeFormData({
         data: vale.data,
-        cliente: vale.cliente,
-        mecanico: vale.mecanico,
-        produto: vale.produto,
-        quantidade: vale.quantidade,
-        valorUnitario: vale.valorUnitario,
-        observacao: vale.observacao,
+        mecanico_id: vale.mecanico_id,
+        mecanico_nome: vale.mecanico_nome,
+        valor: vale.valor,
+        descricao: vale.descricao,
+        status: vale.status
       });
     } else {
       resetValeForm();
@@ -225,141 +187,36 @@ const Vales = () => {
     setIsEstoqueDialogOpen(true);
   };
 
-  const handleSubmitVale = (e: React.FormEvent) => {
+  const handleSubmitVale = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Validação básica
-    if (!valeFormData.cliente || !valeFormData.mecanico || !valeFormData.produto || valeFormData.quantidade <= 0) {
+    if (!valeFormData.mecanico_id || valeFormData.valor <= 0) {
       toast.error("Por favor, preencha todos os campos obrigatórios.");
       return;
     }
     
-    // Verificar se o produto existe no estoque
-    const produtoEstoque = estoque.find(item => item.nome === valeFormData.produto);
-    if (!produtoEstoque) {
-      toast.error("Produto não encontrado no estoque.");
-      return;
-    }
-    
-    // Verificar quantidade disponível
-    if (valeEmEdicao) {
-      // Em caso de edição, verificamos a diferença
-      const valeAntigo = vales.find(v => v.id === valeEmEdicao.id);
-      if (valeAntigo && valeAntigo.produto === valeFormData.produto) {
-        const diferenca = valeFormData.quantidade - valeAntigo.quantidade;
-        if (diferenca > 0 && diferenca > produtoEstoque.quantidade) {
-          toast.error(`Quantidade insuficiente em estoque. Disponível: ${produtoEstoque.quantidade}`);
-          return;
-        }
-      } else if (valeFormData.quantidade > produtoEstoque.quantidade) {
-        toast.error(`Quantidade insuficiente em estoque. Disponível: ${produtoEstoque.quantidade}`);
-        return;
-      }
-    } else if (valeFormData.quantidade > produtoEstoque.quantidade) {
-      toast.error(`Quantidade insuficiente em estoque. Disponível: ${produtoEstoque.quantidade}`);
-      return;
-    }
-    
-    const totalCalculado = calcularTotal(valeFormData.quantidade, valeFormData.valorUnitario);
-    
-    if (valeEmEdicao) {
-      // Editar vale existente
-      const updatedVales = vales.map(v => {
-        if (v.id === valeEmEdicao.id) {
-          return {
-            ...valeFormData,
-            id: v.id,
-            total: totalCalculado,
-          };
-        }
-        return v;
-      });
-      
-      // Atualizar o estoque
-      const valeAntigo = vales.find(v => v.id === valeEmEdicao.id);
-      if (valeAntigo) {
-        let updatedEstoque = [...estoque];
+    try {
+      if (valeEmEdicao) {
+        // Editar vale existente
+        await saveVale({
+          ...valeFormData,
+          id: valeEmEdicao.id
+        } as Vale);
         
-        // Se o produto for o mesmo, ajustamos a diferença
-        if (valeAntigo.produto === valeFormData.produto) {
-          const diferenca = valeFormData.quantidade - valeAntigo.quantidade;
-          updatedEstoque = updatedEstoque.map(item => {
-            if (item.nome === valeFormData.produto) {
-              return {
-                ...item,
-                quantidade: item.quantidade - diferenca,
-              };
-            }
-            return item;
-          });
-        } else {
-          // Se o produto for diferente, devolvemos o antigo e retiramos o novo
-          updatedEstoque = updatedEstoque.map(item => {
-            if (item.nome === valeAntigo.produto) {
-              return {
-                ...item,
-                quantidade: item.quantidade + valeAntigo.quantidade,
-              };
-            }
-            if (item.nome === valeFormData.produto) {
-              return {
-                ...item,
-                quantidade: item.quantidade - valeFormData.quantidade,
-              };
-            }
-            return item;
-          });
-        }
-        
-        setEstoque(updatedEstoque);
+        toast.success("Vale atualizado com sucesso!");
+      } else {
+        // Adicionar novo vale
+        await saveVale(valeFormData as Vale);
+        toast.success("Vale criado com sucesso!");
       }
       
-      setVales(updatedVales);
-      setFilteredVales(
-        searchTerm ? updatedVales.filter(v => 
-          v.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          v.mecanico.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          v.produto.toLowerCase().includes(searchTerm.toLowerCase())
-        ) : updatedVales
-      );
-      
-      toast.success("Vale atualizado com sucesso!");
-    } else {
-      // Adicionar novo vale
-      const newVale: Vale = {
-        id: (vales.length + 1).toString(),
-        ...valeFormData,
-        total: totalCalculado,
-      };
-      
-      const updatedVales = [...vales, newVale];
-      
-      // Atualizar o estoque
-      const updatedEstoque = estoque.map(item => {
-        if (item.nome === valeFormData.produto) {
-          return {
-            ...item,
-            quantidade: item.quantidade - valeFormData.quantidade,
-          };
-        }
-        return item;
-      });
-      
-      setEstoque(updatedEstoque);
-      setVales(updatedVales);
-      setFilteredVales(
-        searchTerm ? updatedVales.filter(v => 
-          v.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          v.mecanico.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          v.produto.toLowerCase().includes(searchTerm.toLowerCase())
-        ) : updatedVales
-      );
-      
-      toast.success("Vale criado com sucesso!");
+      setIsValeDialogOpen(false);
+      resetValeForm();
+    } catch (error) {
+      console.error("Erro ao salvar vale:", error);
+      toast.error("Ocorreu um erro ao salvar o vale");
     }
-    
-    setIsValeDialogOpen(false);
-    resetValeForm();
   };
 
   const handleSubmitEstoque = (e: React.FormEvent) => {
@@ -395,35 +252,14 @@ const Vales = () => {
     resetEstoqueForm();
   };
 
-  const handleDeleteVale = (id: string) => {
+  const handleDeleteVale = async (id: string) => {
     if (confirm("Tem certeza que deseja excluir este vale?")) {
-      const valeParaExcluir = vales.find(v => v.id === id);
-      
-      if (valeParaExcluir) {
-        // Devolver a quantidade ao estoque
-        const updatedEstoque = estoque.map(item => {
-          if (item.nome === valeParaExcluir.produto) {
-            return {
-              ...item,
-              quantidade: item.quantidade + valeParaExcluir.quantidade,
-            };
-          }
-          return item;
-        });
-        
-        setEstoque(updatedEstoque);
-        
-        const updatedVales = vales.filter(v => v.id !== id);
-        setVales(updatedVales);
-        setFilteredVales(
-          searchTerm ? updatedVales.filter(v => 
-            v.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            v.mecanico.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            v.produto.toLowerCase().includes(searchTerm.toLowerCase())
-          ) : updatedVales
-        );
-        
+      try {
+        await deleteVale(id);
         toast.success("Vale excluído com sucesso!");
+      } catch (error) {
+        console.error("Erro ao excluir vale:", error);
+        toast.error("Ocorreu um erro ao excluir o vale");
       }
     }
   };
@@ -433,7 +269,7 @@ const Vales = () => {
       const itemParaExcluir = estoque.find(item => item.id === id);
       
       // Verificar se o item está sendo usado em algum vale
-      if (itemParaExcluir && vales.some(v => v.produto === itemParaExcluir.nome)) {
+      if (itemParaExcluir && vales.some(v => v.descricao === itemParaExcluir.nome)) {
         toast.error("Este item não pode ser excluído pois está sendo usado em vales.");
         return;
       }
@@ -540,10 +376,9 @@ const Vales = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Data</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Produto</TableHead>
-                      <TableHead>Qtd</TableHead>
-                      <TableHead>Total</TableHead>
+                      <TableHead>Mecânico</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Status</TableHead>
                       {(isAdmin || isUsuario) && <TableHead className="w-[100px]">Ações</TableHead>}
                     </TableRow>
                   </TableHeader>
@@ -552,10 +387,9 @@ const Vales = () => {
                       filteredVales.map((vale) => (
                         <TableRow key={vale.id}>
                           <TableCell>{formatarData(vale.data)}</TableCell>
-                          <TableCell>{vale.cliente}</TableCell>
-                          <TableCell>{vale.produto}</TableCell>
-                          <TableCell>{vale.quantidade}</TableCell>
-                          <TableCell>{formatarValor(vale.total)}</TableCell>
+                          <TableCell>{vale.mecanico_nome}</TableCell>
+                          <TableCell>{formatarValor(vale.valor)}</TableCell>
+                          <TableCell>{vale.status}</TableCell>
                           {(isAdmin || isUsuario) && (
                             <TableCell>
                               <div className="flex space-x-1">
@@ -663,7 +497,7 @@ const Vales = () => {
         </div>
       </div>
 
-      {/* Dialog para Novo Vale */}
+      {/* Dialog para Novo Vale - Adaptado para Supabase */}
       <Dialog open={isValeDialogOpen} onOpenChange={setIsValeDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -689,87 +523,57 @@ const Vales = () => {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="mecanico">Mecânico</Label>
-                  <Input
-                    id="mecanico"
-                    name="mecanico"
-                    value={valeFormData.mecanico}
-                    onChange={handleValeInputChange}
+                  <Label htmlFor="mecanico_id">Mecânico</Label>
+                  <select
+                    id="mecanico_id"
+                    name="mecanico_id"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={valeFormData.mecanico_id}
+                    onChange={(e) => handleMecanicoChange(e.target.value)}
                     required
-                  />
+                  >
+                    <option value="">Selecione um mecânico</option>
+                    {mecanicos.map(mecanico => (
+                      <option key={mecanico.id} value={mecanico.id}>
+                        {mecanico.nome}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="cliente">Cliente</Label>
+                <Label htmlFor="valor">Valor (R$)</Label>
                 <Input
-                  id="cliente"
-                  name="cliente"
-                  value={valeFormData.cliente}
+                  id="valor"
+                  name="valor"
+                  type="text"
+                  value={valeFormData.valor === 0 ? "" : valeFormData.valor.toString().replace(".", ",")}
                   onChange={handleValeInputChange}
                   required
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="produto">Produto</Label>
+                <Label htmlFor="status">Status</Label>
                 <select
-                  id="produto"
-                  name="produto"
+                  id="status"
+                  name="status"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={valeFormData.produto}
+                  value={valeFormData.status}
                   onChange={handleValeInputChange}
                   required
                 >
-                  <option value="">Selecione um produto</option>
-                  {estoque.map(item => (
-                    <option key={item.id} value={item.nome}>
-                      {item.nome} - {item.quantidade} un disponíveis
-                    </option>
-                  ))}
+                  <option value="pendente">Pendente</option>
+                  <option value="pago">Pago</option>
+                  <option value="cancelado">Cancelado</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="quantidade">Quantidade</Label>
-                  <Input
-                    id="quantidade"
-                    name="quantidade"
-                    type="number"
-                    min="1"
-                    value={valeFormData.quantidade}
-                    onChange={handleValeInputChange}
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="valorUnitario">Valor Unitário (R$)</Label>
-                  <Input
-                    id="valorUnitario"
-                    name="valorUnitario"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={valeFormData.valorUnitario}
-                    onChange={handleValeInputChange}
-                    required
-                  />
-                </div>
-              </div>
               <div className="grid gap-2">
-                <Label htmlFor="total">Valor Total (R$)</Label>
-                <Input
-                  id="total"
-                  value={formatarValor(calcularTotal(valeFormData.quantidade, valeFormData.valorUnitario))}
-                  readOnly
-                  className="bg-gray-50"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="observacao">Observação</Label>
+                <Label htmlFor="descricao">Descrição</Label>
                 <Textarea
-                  id="observacao"
-                  name="observacao"
-                  rows={2}
-                  value={valeFormData.observacao}
+                  id="descricao"
+                  name="descricao"
+                  rows={3}
+                  value={valeFormData.descricao}
                   onChange={handleValeInputChange}
                 />
               </div>

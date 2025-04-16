@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -13,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useOfflineData } from "@/hooks/useOfflineData";
 
 // Tipos para serviços
 type StatusServico = "em_andamento" | "concluido" | "cancelado";
@@ -23,91 +23,25 @@ type Servico = {
   cliente: string;
   veiculo: string;
   descricao: string;
-  mecanicoId: string;
-  mecanicoNome: string;
+  mecanico_id: string;
+  mecanico_nome: string;
   valor: number;
   telefone: string;
   status: StatusServico;
-  clienteAgradecido?: boolean; // Novo campo para controlar se o cliente já foi agradecido
+  cliente_agradecido: boolean;
+  created_at?: string;
 };
 
-// Mock de mecânicos (será substituído pela integração real com os mecânicos cadastrados)
-const mockMecanicos = [
-  { id: "1", nome: "Carlos Pereira" },
-  { id: "2", nome: "Roberto Silva" },
-  { id: "3", nome: "Antônio Santos" },
-  { id: "4", nome: "José Oliveira" },
-  { id: "5", nome: "Paulo Costa" },
-];
-
-// Mock de serviços
-const mockServicos: Servico[] = [
-  {
-    id: "1",
-    data: "2025-06-01",
-    cliente: "João Silva",
-    veiculo: "Ford Ka 2018",
-    descricao: "Troca de óleo e filtros",
-    mecanicoId: "1",
-    mecanicoNome: "Carlos Pereira",
-    valor: 250.0,
-    telefone: "69912345678",
-    status: "em_andamento",
-    clienteAgradecido: false,
-  },
-  {
-    id: "2",
-    data: "2025-05-29",
-    cliente: "Maria Santos",
-    veiculo: "Honda Fit 2020",
-    descricao: "Revisão completa",
-    mecanicoId: "2",
-    mecanicoNome: "Roberto Silva",
-    valor: 450.0,
-    telefone: "69987654321",
-    status: "em_andamento",
-    clienteAgradecido: false,
-  },
-  {
-    id: "3",
-    data: "2025-05-28",
-    cliente: "Pedro Oliveira",
-    veiculo: "Fiat Uno 2015",
-    descricao: "Troca de pastilhas de freio",
-    mecanicoId: "3",
-    mecanicoNome: "Antônio Santos",
-    valor: 180.0,
-    telefone: "69998765432",
-    status: "concluido",
-    clienteAgradecido: false,
-  },
-  {
-    id: "4",
-    data: "2025-05-27",
-    cliente: "Ana Rodrigues",
-    veiculo: "Toyota Corolla 2021",
-    descricao: "Alinhamento e balanceamento",
-    mecanicoId: "4",
-    mecanicoNome: "José Oliveira",
-    valor: 220.0,
-    telefone: "69987651234",
-    status: "concluido",
-    clienteAgradecido: true,
-  },
-  {
-    id: "5",
-    data: "2025-05-25",
-    cliente: "Carlos Mendes",
-    veiculo: "Renault Sandero 2019",
-    descricao: "Troca de correia dentada",
-    mecanicoId: "5",
-    mecanicoNome: "Paulo Costa",
-    valor: 350.0,
-    telefone: "69912348765",
-    status: "cancelado",
-    clienteAgradecido: false,
-  },
-];
+// Tipo para mecânicos
+type Mecanico = {
+  id: string;
+  nome: string;
+  especialidade: string;
+  telefone: string;
+  email: string;
+  observacoes: string;
+  created_at?: string;
+};
 
 // Função para gerar o link de agradecimento via WhatsApp
 const gerarLinkWhatsApp = (telefone: string, nomeMecanico: string) => {
@@ -126,9 +60,10 @@ const gerarLinkWhatsApp = (telefone: string, nomeMecanico: string) => {
 
 const Servicos = () => {
   const { user } = useAuth();
-  const [servicos, setServicos] = useState<Servico[]>(mockServicos);
+  const { data: servicos, loading: loadingServicos, saveItem: saveServico, deleteItem: deleteServico } = useOfflineData<Servico>('servicos');
+  const { data: mecanicos, loading: loadingMecanicos } = useOfflineData<Mecanico>('mecanicos');
+  
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [mecanicos, setMecanicos] = useState(mockMecanicos);
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState<StatusServico | "todos">("todos");
   const [editandoServico, setEditandoServico] = useState<Servico | null>(null);
@@ -139,11 +74,11 @@ const Servicos = () => {
     cliente: "",
     veiculo: "",
     descricao: "",
-    mecanicoId: "",
+    mecanico_id: "",
     valor: 0,
     telefone: "699",
     status: "em_andamento",
-    clienteAgradecido: false
+    cliente_agradecido: false
   });
 
   // Estado para controlar erros de validação
@@ -151,7 +86,7 @@ const Servicos = () => {
     cliente?: string;
     veiculo?: string;
     descricao?: string;
-    mecanicoId?: string;
+    mecanico_id?: string;
     valor?: string;
     telefone?: string;
   }>({});
@@ -204,13 +139,13 @@ const Servicos = () => {
     const mecanicoSelecionado = mecanicos.find(m => m.id === mecanicoId);
     setFormData({ 
       ...formData, 
-      mecanicoId, 
-      mecanicoNome: mecanicoSelecionado ? mecanicoSelecionado.nome : "" 
+      mecanico_id: mecanicoId, 
+      mecanico_nome: mecanicoSelecionado ? mecanicoSelecionado.nome : "" 
     });
   };
 
   // Função para alternar o status do serviço
-  const alternarStatus = (servico: Servico) => {
+  const alternarStatus = async (servico: Servico) => {
     let novoStatus: StatusServico;
     
     // Define a sequência de alternância: em_andamento -> concluido -> cancelado -> em_andamento
@@ -222,19 +157,23 @@ const Servicos = () => {
       novoStatus = "em_andamento";
     }
     
-    // Atualiza o status do serviço
-    const servicosAtualizados = servicos.map(s => 
-      s.id === servico.id ? { ...s, status: novoStatus } : s
-    );
-    
-    setServicos(servicosAtualizados);
-    
-    // Exibe mensagem de confirmação
-    toast.success(`Status do serviço atualizado para ${
-      novoStatus === "em_andamento" ? "Em andamento" : 
-      novoStatus === "concluido" ? "Concluído" : 
-      "Cancelado"
-    }`);
+    try {
+      // Atualiza o status do serviço no Supabase
+      await saveServico({
+        ...servico,
+        status: novoStatus
+      });
+      
+      // Exibe mensagem de confirmação
+      toast.success(`Status do serviço atualizado para ${
+        novoStatus === "em_andamento" ? "Em andamento" : 
+        novoStatus === "concluido" ? "Concluído" : 
+        "Cancelado"
+      }`);
+    } catch (error) {
+      toast.error("Erro ao atualizar status do serviço");
+      console.error(error);
+    }
   };
 
   // Função para tratar a seleção do status no formulário
@@ -258,8 +197,8 @@ const Servicos = () => {
       novosErros.descricao = "Descrição do serviço é obrigatória";
     }
 
-    if (!formData.mecanicoId) {
-      novosErros.mecanicoId = "Selecione um mecânico";
+    if (!formData.mecanico_id) {
+      novosErros.mecanico_id = "Selecione um mecânico";
     }
 
     if (!formData.valor || formData.valor <= 0) {
@@ -278,41 +217,46 @@ const Servicos = () => {
   };
 
   // Função para salvar o serviço
-  const salvarServico = () => {
+  const salvarServico = async () => {
     if (!validarFormulario()) {
       toast.error("Por favor, corrija os erros no formulário");
       return;
     }
 
-    if (editandoServico) {
-      // Atualizar serviço existente
-      const servicosAtualizados = servicos.map(s => 
-        s.id === editandoServico.id ? { ...formData, id: editandoServico.id } as Servico : s
-      );
-      setServicos(servicosAtualizados);
-      toast.success("Serviço atualizado com sucesso!");
-    } else {
-      // Adicionar novo serviço
-      const novoServico: Servico = {
-        ...formData as Omit<Servico, 'id'>,
-        id: Date.now().toString(), // Simulação de ID
-        clienteAgradecido: false
-      } as Servico;
-      
-      setServicos([...servicos, novoServico]);
-      toast.success("Serviço adicionado com sucesso!");
-    }
+    try {
+      if (editandoServico) {
+        // Atualizar serviço existente
+        await saveServico({
+          ...formData,
+          id: editandoServico.id
+        } as Servico);
+        
+        toast.success("Serviço atualizado com sucesso!");
+      } else {
+        // Adicionar novo serviço
+        await saveServico(formData as Servico);
+        toast.success("Serviço adicionado com sucesso!");
+      }
 
-    // Fechar o diálogo e resetar o formulário
-    setDialogOpen(false);
-    resetarFormulario();
+      // Fechar o diálogo e resetar o formulário
+      setDialogOpen(false);
+      resetarFormulario();
+    } catch (error) {
+      toast.error("Erro ao salvar serviço");
+      console.error(error);
+    }
   };
 
   // Função para excluir um serviço
-  const excluirServico = (id: string) => {
+  const excluirServico = async (id: string) => {
     if (window.confirm("Tem certeza que deseja excluir este serviço?")) {
-      setServicos(servicos.filter(s => s.id !== id));
-      toast.success("Serviço excluído com sucesso!");
+      try {
+        await deleteServico(id);
+        toast.success("Serviço excluído com sucesso!");
+      } catch (error) {
+        toast.error("Erro ao excluir serviço");
+        console.error(error);
+      }
     }
   };
 
@@ -340,28 +284,33 @@ const Servicos = () => {
       cliente: "",
       veiculo: "",
       descricao: "",
-      mecanicoId: "",
+      mecanico_id: "",
       valor: 0,
       telefone: "699",
       status: "em_andamento",
-      clienteAgradecido: false
+      cliente_agradecido: false
     });
     setErrors({});
   };
 
   // Função para agradecer ao cliente via WhatsApp
-  const agradecerCliente = (servico: Servico) => {
-    const whatsappLink = gerarLinkWhatsApp(servico.telefone, servico.mecanicoNome);
+  const agradecerCliente = async (servico: Servico) => {
+    const whatsappLink = gerarLinkWhatsApp(servico.telefone, servico.mecanico_nome);
     
     if (whatsappLink) {
-      // Marca o cliente como agradecido
-      const servicosAtualizados = servicos.map(s => 
-        s.id === servico.id ? { ...s, clienteAgradecido: true } : s
-      );
-      setServicos(servicosAtualizados);
-      
-      // Abre o WhatsApp
-      window.open(whatsappLink, '_blank');
+      try {
+        // Marca o cliente como agradecido
+        await saveServico({
+          ...servico,
+          cliente_agradecido: true
+        });
+        
+        // Abre o WhatsApp
+        window.open(whatsappLink, '_blank');
+      } catch (error) {
+        toast.error("Erro ao atualizar status de agradecimento");
+        console.error(error);
+      }
     } else {
       toast.error("Número de telefone inválido para envio de mensagem");
     }
@@ -379,13 +328,6 @@ const Servicos = () => {
     return matchBusca && matchStatus;
   });
 
-  // Efeito para carregar os mecânicos cadastrados (em um sistema real, buscaria do banco de dados)
-  useEffect(() => {
-    // Aqui seria implementada a busca dos mecânicos cadastrados
-    // Por enquanto, usamos os dados mock
-    setMecanicos(mockMecanicos);
-  }, []);
-  
   // Função para renderizar os botões de status
   const renderizarBotaoStatus = (servico: Servico) => {
     return (
@@ -491,7 +433,7 @@ const Servicos = () => {
                             </TableCell>
                             <TableCell>{servico.cliente}</TableCell>
                             <TableCell>{servico.veiculo}</TableCell>
-                            <TableCell>{servico.mecanicoNome}</TableCell>
+                            <TableCell>{servico.mecanico_nome}</TableCell>
                             <TableCell>{formatarMoeda(servico.valor)}</TableCell>
                             <TableCell>
                               {renderizarBotaoStatus(servico)}
@@ -510,7 +452,7 @@ const Servicos = () => {
                                   size="icon"
                                   onClick={() => agradecerCliente(servico)}
                                   title="Agradecer ao Cliente"
-                                  className={servico.clienteAgradecido ? "text-red-500" : "text-green-500"}
+                                  className={servico.cliente_agradecido ? "text-red-500" : "text-green-500"}
                                 >
                                   <MessageSquare className="h-4 w-4" />
                                 </Button>
@@ -562,7 +504,7 @@ const Servicos = () => {
                             </TableCell>
                             <TableCell>{servico.cliente}</TableCell>
                             <TableCell>{servico.veiculo}</TableCell>
-                            <TableCell>{servico.mecanicoNome}</TableCell>
+                            <TableCell>{servico.mecanico_nome}</TableCell>
                             <TableCell>{formatarMoeda(servico.valor)}</TableCell>
                             <TableCell>
                               {renderizarBotaoStatus(servico)}
@@ -622,7 +564,7 @@ const Servicos = () => {
                             </TableCell>
                             <TableCell>{servico.cliente}</TableCell>
                             <TableCell>{servico.veiculo}</TableCell>
-                            <TableCell>{servico.mecanicoNome}</TableCell>
+                            <TableCell>{servico.mecanico_nome}</TableCell>
                             <TableCell>{formatarMoeda(servico.valor)}</TableCell>
                             <TableCell>
                               {renderizarBotaoStatus(servico)}
@@ -640,7 +582,7 @@ const Servicos = () => {
                                 size="icon"
                                 onClick={() => agradecerCliente(servico)}
                                 title="Agradecer ao Cliente"
-                                className={servico.clienteAgradecido ? "text-red-500" : "text-green-500"}
+                                className={servico.cliente_agradecido ? "text-red-500" : "text-green-500"}
                               >
                                 <MessageSquare className="h-4 w-4" />
                               </Button>
@@ -691,7 +633,7 @@ const Servicos = () => {
                             </TableCell>
                             <TableCell>{servico.cliente}</TableCell>
                             <TableCell>{servico.veiculo}</TableCell>
-                            <TableCell>{servico.mecanicoNome}</TableCell>
+                            <TableCell>{servico.mecanico_nome}</TableCell>
                             <TableCell>{formatarMoeda(servico.valor)}</TableCell>
                             <TableCell>
                               {renderizarBotaoStatus(servico)}
@@ -749,17 +691,17 @@ const Servicos = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="mecanicoId">
+                  <Label htmlFor="mecanico_id">
                     <div className="flex items-center gap-1">
                       <Wrench className="h-4 w-4" />
                       <span>Mecânico Responsável</span>
                     </div>
                   </Label>
                   <Select
-                    value={formData.mecanicoId}
+                    value={formData.mecanico_id}
                     onValueChange={handleMecanicoChange}
                   >
-                    <SelectTrigger id="mecanicoId" className={errors.mecanicoId ? "border-red-500" : ""}>
+                    <SelectTrigger id="mecanico_id" className={errors.mecanico_id ? "border-red-500" : ""}>
                       <SelectValue placeholder="Selecione um mecânico" />
                     </SelectTrigger>
                     <SelectContent>
@@ -770,8 +712,8 @@ const Servicos = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  {errors.mecanicoId && (
-                    <p className="text-sm text-red-500">{errors.mecanicoId}</p>
+                  {errors.mecanico_id && (
+                    <p className="text-sm text-red-500">{errors.mecanico_id}</p>
                   )}
                 </div>
               </div>
