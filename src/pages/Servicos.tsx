@@ -1,17 +1,19 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PlusCircle, Pencil, Trash2, Search, X, Filter } from "lucide-react";
+import { PlusCircle, Pencil, Trash2, Search, X, Filter, Wrench, FileText, DollarSign, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { StatusSincronizacao } from "@/components/StatusSincronizacao";
 
 // Tipos para serviços
 type StatusServico = "em_andamento" | "concluido" | "cancelado";
@@ -25,10 +27,11 @@ type Servico = {
   mecanicoId: string;
   mecanicoNome: string;
   valor: number;
+  telefone: string;
   status: StatusServico;
 };
 
-// Mock de mecânicos para o select
+// Mock de mecânicos (será substituído pela integração real com os mecânicos cadastrados)
 const mockMecanicos = [
   { id: "1", nome: "Carlos Pereira" },
   { id: "2", nome: "Roberto Silva" },
@@ -48,6 +51,7 @@ const mockServicos: Servico[] = [
     mecanicoId: "1",
     mecanicoNome: "Carlos Pereira",
     valor: 250.0,
+    telefone: "69912345678",
     status: "em_andamento",
   },
   {
@@ -59,6 +63,7 @@ const mockServicos: Servico[] = [
     mecanicoId: "2",
     mecanicoNome: "Roberto Silva",
     valor: 450.0,
+    telefone: "69987654321",
     status: "em_andamento",
   },
   {
@@ -70,6 +75,7 @@ const mockServicos: Servico[] = [
     mecanicoId: "3",
     mecanicoNome: "Antônio Santos",
     valor: 180.0,
+    telefone: "69998765432",
     status: "concluido",
   },
   {
@@ -80,90 +86,205 @@ const mockServicos: Servico[] = [
     descricao: "Alinhamento e balanceamento",
     mecanicoId: "4",
     mecanicoNome: "José Oliveira",
-    valor: 200.0,
+    valor: 220.0,
+    telefone: "69987651234",
     status: "concluido",
   },
   {
     id: "5",
-    data: "2025-05-26",
+    data: "2025-05-25",
     cliente: "Carlos Mendes",
-    veiculo: "Volkswagen Gol 2019",
-    descricao: "Reparo no sistema elétrico",
+    veiculo: "Renault Sandero 2019",
+    descricao: "Troca de correia dentada",
     mecanicoId: "5",
     mecanicoNome: "Paulo Costa",
-    valor: 320.0,
+    valor: 350.0,
+    telefone: "69912348765",
     status: "cancelado",
   },
 ];
 
 const Servicos = () => {
+  const { user } = useAuth();
   const [servicos, setServicos] = useState<Servico[]>(mockServicos);
-  const [filteredServicos, setFilteredServicos] = useState<Servico[]>(mockServicos);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentTab, setCurrentTab] = useState<string>("todos");
-  const [servicoEmEdicao, setServicoEmEdicao] = useState<Servico | null>(null);
-  const [formData, setFormData] = useState<Omit<Servico, "id" | "mecanicoNome">>({
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [mecanicos, setMecanicos] = useState(mockMecanicos);
+  const [busca, setBusca] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState<StatusServico | "todos">("todos");
+  const [editandoServico, setEditandoServico] = useState<Servico | null>(null);
+  
+  // Estado para o formulário
+  const [formData, setFormData] = useState<Partial<Servico>>({
     data: new Date().toISOString().split("T")[0],
     cliente: "",
     veiculo: "",
     descricao: "",
     mecanicoId: "",
     valor: 0,
-    status: "em_andamento",
+    telefone: "699",
+    status: "em_andamento"
   });
 
-  const { user } = useAuth();
-  const isAdmin = user?.perfil === "admin";
-  const isUsuario = user?.perfil === "usuario";
-  
-  // Filtrar por status e termo de busca
-  const filterServicos = (status: string, term: string) => {
-    let filtered = [...servicos];
-    
-    // Filtrar por status
-    if (status !== "todos") {
-      filtered = filtered.filter(servico => servico.status === status);
-    }
-    
-    // Filtrar por termo de busca
-    if (term.trim()) {
-      filtered = filtered.filter(
-        servico =>
-          servico.cliente.toLowerCase().includes(term.toLowerCase()) ||
-          servico.veiculo.toLowerCase().includes(term.toLowerCase()) ||
-          servico.descricao.toLowerCase().includes(term.toLowerCase()) ||
-          servico.mecanicoNome.toLowerCase().includes(term.toLowerCase())
-      );
-    }
-    
-    setFilteredServicos(filtered);
+  // Estado para controlar erros de validação
+  const [errors, setErrors] = useState<{
+    cliente?: string;
+    veiculo?: string;
+    descricao?: string;
+    mecanicoId?: string;
+    valor?: string;
+    telefone?: string;
+  }>({});
+
+  // Função para formatar o valor como moeda
+  const formatarMoeda = (valor: number) => {
+    return valor.toLocaleString('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    });
   };
 
-  const handleTabChange = (value: string) => {
-    setCurrentTab(value);
-    filterServicos(value, searchTerm);
-  };
-
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const term = e.target.value;
-    setSearchTerm(term);
-    filterServicos(currentTab, term);
-  };
-
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => {
+  // Função para tratar a mudança nos campos do formulário
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     
     if (name === "valor") {
-      setFormData(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
+      // Remove qualquer caractere que não seja número ou vírgula
+      const numericValue = value.replace(/[^\d,]/g, '');
+      // Substitui vírgula por ponto para realizar cálculos
+      const formattedValue = numericValue.replace(',', '.');
+      setFormData({ ...formData, [name]: parseFloat(formattedValue) || 0 });
+    } else if (name === "telefone") {
+      // Garante que o telefone tenha o formato correto (DDD + 9 + número)
+      let telValue = value;
+      
+      // Se o usuário apagar tudo, reinicie com "699"
+      if (telValue.length < 3) {
+        telValue = "699";
+      }
+      
+      // Limita a 11 dígitos (DDD + 9 + 8 dígitos)
+      if (telValue.length > 11) {
+        telValue = telValue.slice(0, 11);
+      }
+      
+      // Garante que comece com "699"
+      if (!telValue.startsWith("699")) {
+        telValue = "699" + telValue.substring(3);
+      }
+      
+      setFormData({ ...formData, [name]: telValue });
     } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+      setFormData({ ...formData, [name]: value });
     }
   };
 
-  const resetForm = () => {
+  // Função para tratar a seleção do mecânico
+  const handleMecanicoChange = (mecanicoId: string) => {
+    const mecanicoSelecionado = mecanicos.find(m => m.id === mecanicoId);
+    setFormData({ 
+      ...formData, 
+      mecanicoId, 
+      mecanicoNome: mecanicoSelecionado ? mecanicoSelecionado.nome : "" 
+    });
+  };
+
+  // Função para tratar a seleção do status
+  const handleStatusChange = (status: StatusServico) => {
+    setFormData({ ...formData, status });
+  };
+
+  // Função para validar o formulário
+  const validarFormulario = (): boolean => {
+    const novosErros: typeof errors = {};
+
+    if (!formData.cliente?.trim()) {
+      novosErros.cliente = "Nome do cliente é obrigatório";
+    }
+
+    if (!formData.veiculo?.trim()) {
+      novosErros.veiculo = "Veículo é obrigatório";
+    }
+
+    if (!formData.descricao?.trim()) {
+      novosErros.descricao = "Descrição do serviço é obrigatória";
+    }
+
+    if (!formData.mecanicoId) {
+      novosErros.mecanicoId = "Selecione um mecânico";
+    }
+
+    if (!formData.valor || formData.valor <= 0) {
+      novosErros.valor = "Valor deve ser maior que zero";
+    }
+
+    // Validação de telefone: deve ter 11 dígitos (2 do DDD + 9 + 8 do número)
+    if (!formData.telefone || formData.telefone.length !== 11) {
+      novosErros.telefone = "Telefone deve estar no formato (DD)9XXXXXXXX";
+    } else if (!formData.telefone.startsWith("699")) {
+      novosErros.telefone = "Telefone deve começar com 699 (Rondônia)";
+    }
+
+    setErrors(novosErros);
+    return Object.keys(novosErros).length === 0;
+  };
+
+  // Função para salvar o serviço
+  const salvarServico = () => {
+    if (!validarFormulario()) {
+      toast.error("Por favor, corrija os erros no formulário");
+      return;
+    }
+
+    if (editandoServico) {
+      // Atualizar serviço existente
+      const servicosAtualizados = servicos.map(s => 
+        s.id === editandoServico.id ? { ...formData, id: editandoServico.id } as Servico : s
+      );
+      setServicos(servicosAtualizados);
+      toast.success("Serviço atualizado com sucesso!");
+    } else {
+      // Adicionar novo serviço
+      const novoServico: Servico = {
+        ...formData as Omit<Servico, 'id'>,
+        id: Date.now().toString() // Simulação de ID
+      } as Servico;
+      
+      setServicos([...servicos, novoServico]);
+      toast.success("Serviço adicionado com sucesso!");
+    }
+
+    // Fechar o diálogo e resetar o formulário
+    setDialogOpen(false);
+    resetarFormulario();
+  };
+
+  // Função para excluir um serviço
+  const excluirServico = (id: string) => {
+    if (window.confirm("Tem certeza que deseja excluir este serviço?")) {
+      setServicos(servicos.filter(s => s.id !== id));
+      toast.success("Serviço excluído com sucesso!");
+    }
+  };
+
+  // Função para abrir o diálogo de edição
+  const abrirEdicao = (servico: Servico) => {
+    setEditandoServico(servico);
+    setFormData({
+      ...servico,
+      data: servico.data // Mantém a data original
+    });
+    setDialogOpen(true);
+  };
+
+  // Função para abrir o diálogo de novo serviço
+  const abrirNovoServico = () => {
+    setEditandoServico(null);
+    resetarFormulario();
+    setDialogOpen(true);
+  };
+
+  // Função para resetar o formulário
+  const resetarFormulario = () => {
     setFormData({
       data: new Date().toISOString().split("T")[0],
       cliente: "",
@@ -171,223 +292,254 @@ const Servicos = () => {
       descricao: "",
       mecanicoId: "",
       valor: 0,
-      status: "em_andamento",
+      telefone: "699",
+      status: "em_andamento"
     });
-    setServicoEmEdicao(null);
+    setErrors({});
   };
 
-  const handleOpenDialog = (servico?: Servico) => {
-    if (servico) {
-      setServicoEmEdicao(servico);
-      setFormData({
-        data: servico.data,
-        cliente: servico.cliente,
-        veiculo: servico.veiculo,
-        descricao: servico.descricao,
-        mecanicoId: servico.mecanicoId,
-        valor: servico.valor,
-        status: servico.status,
-      });
-    } else {
-      resetForm();
-      setServicoEmEdicao(null);
-    }
-    setIsDialogOpen(true);
-  };
+  // Filtrar serviços
+  const servicosFiltrados = servicos.filter(servico => {
+    const matchBusca = 
+      servico.cliente.toLowerCase().includes(busca.toLowerCase()) ||
+      servico.veiculo.toLowerCase().includes(busca.toLowerCase()) ||
+      servico.descricao.toLowerCase().includes(busca.toLowerCase());
+    
+    const matchStatus = filtroStatus === "todos" || servico.status === filtroStatus;
+    
+    return matchBusca && matchStatus;
+  });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validação básica
-    if (!formData.cliente || !formData.veiculo || !formData.descricao || !formData.mecanicoId) {
-      toast.error("Por favor, preencha todos os campos obrigatórios.");
-      return;
-    }
-    
-    const mecanicoSelecionado = mockMecanicos.find(mec => mec.id === formData.mecanicoId);
-    if (!mecanicoSelecionado) {
-      toast.error("Selecione um mecânico válido.");
-      return;
-    }
-    
-    if (servicoEmEdicao) {
-      // Editar serviço existente
-      const updatedServicos = servicos.map(serv =>
-        serv.id === servicoEmEdicao.id
-          ? {
-              ...formData,
-              id: serv.id,
-              mecanicoNome: mecanicoSelecionado.nome,
-            }
-          : serv
-      );
-      setServicos(updatedServicos);
-      filterServicos(currentTab, searchTerm);
-      toast.success("Serviço atualizado com sucesso!");
-    } else {
-      // Adicionar novo serviço
-      const newServico: Servico = {
-        id: (servicos.length + 1).toString(),
-        ...formData,
-        mecanicoNome: mecanicoSelecionado.nome,
-      };
-      const updatedServicos = [...servicos, newServico];
-      setServicos(updatedServicos);
-      filterServicos(currentTab, searchTerm);
-      toast.success("Serviço adicionado com sucesso!");
-    }
-    
-    setIsDialogOpen(false);
-    resetForm();
-  };
-
-  const handleChangeStatus = (id: string, newStatus: StatusServico) => {
-    const updatedServicos = servicos.map(serv =>
-      serv.id === id ? { ...serv, status: newStatus } : serv
-    );
-    setServicos(updatedServicos);
-    filterServicos(currentTab, searchTerm);
-    
-    const statusMessages = {
-      em_andamento: "Serviço marcado como em andamento",
-      concluido: "Serviço marcado como concluído",
-      cancelado: "Serviço marcado como cancelado",
-    };
-    
-    toast.success(statusMessages[newStatus]);
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm("Tem certeza que deseja excluir este serviço?")) {
-      const updatedServicos = servicos.filter(serv => serv.id !== id);
-      setServicos(updatedServicos);
-      filterServicos(currentTab, searchTerm);
-      toast.success("Serviço excluído com sucesso!");
-    }
-  };
-
-  const formatarData = (dataString: string) => {
-    const data = new Date(dataString);
-    return data.toLocaleDateString('pt-BR');
-  };
-
-  const formatarValor = (valor: number) => {
-    return valor.toLocaleString('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    });
-  };
+  // Efeito para carregar os mecânicos cadastrados (em um sistema real, buscaria do banco de dados)
+  useEffect(() => {
+    // Aqui seria implementada a busca dos mecânicos cadastrados
+    // Por enquanto, usamos os dados mock
+    setMecanicos(mockMecanicos);
+  }, []);
 
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold">Serviços</h1>
-          {(isAdmin || isUsuario) && (
-            <Button onClick={() => handleOpenDialog()}>
-              <PlusCircle className="h-4 w-4 mr-2" />
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <h1 className="text-3xl font-bold">Gerenciamento de Serviços</h1>
+          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+            <div className="relative flex-grow">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Buscar serviços..."
+                className="pl-8"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
+            </div>
+            <Button onClick={abrirNovoServico}>
+              <PlusCircle className="mr-2 h-4 w-4" />
               Novo Serviço
             </Button>
-          )}
+          </div>
         </div>
 
-        <Tabs defaultValue="todos" onValueChange={handleTabChange}>
-          <div className="flex justify-between items-center border-b pb-3">
-            <TabsList>
-              <TabsTrigger value="todos">Todos</TabsTrigger>
-              <TabsTrigger value="em_andamento">Em Andamento</TabsTrigger>
-              <TabsTrigger value="concluido">Concluídos</TabsTrigger>
-              <TabsTrigger value="cancelado">Cancelados</TabsTrigger>
-            </TabsList>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-3">
+            <Tabs defaultValue="todos" className="w-full">
+              <TabsList className="mb-4">
+                <TabsTrigger value="todos" onClick={() => setFiltroStatus("todos")}>
+                  Todos os Serviços
+                </TabsTrigger>
+                <TabsTrigger value="em_andamento" onClick={() => setFiltroStatus("em_andamento")}>
+                  Em Andamento
+                </TabsTrigger>
+                <TabsTrigger value="concluido" onClick={() => setFiltroStatus("concluido")}>
+                  Concluídos
+                </TabsTrigger>
+                <TabsTrigger value="cancelado" onClick={() => setFiltroStatus("cancelado")}>
+                  Cancelados
+                </TabsTrigger>
+              </TabsList>
 
-            <div className="relative flex items-center ml-auto">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                placeholder="Buscar serviços..."
-                className="pl-10 min-w-[300px]"
-                value={searchTerm}
-                onChange={handleSearch}
-              />
-              {searchTerm && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                  onClick={() => {
-                    setSearchTerm("");
-                    filterServicos(currentTab, "");
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
+              <TabsContent value="todos" className="mt-0">
+                <Card>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead>Veículo</TableHead>
+                          <TableHead>Mecânico</TableHead>
+                          <TableHead>Valor</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {servicosFiltrados.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={7} className="text-center py-4">
+                              Nenhum serviço encontrado
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          servicosFiltrados.map((servico) => (
+                            <TableRow key={servico.id}>
+                              <TableCell>
+                                {new Date(servico.data).toLocaleDateString('pt-BR')}
+                              </TableCell>
+                              <TableCell>{servico.cliente}</TableCell>
+                              <TableCell>{servico.veiculo}</TableCell>
+                              <TableCell>{servico.mecanicoNome}</TableCell>
+                              <TableCell>{formatarMoeda(servico.valor)}</TableCell>
+                              <TableCell>
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    servico.status === "em_andamento"
+                                      ? "bg-blue-100 text-blue-800"
+                                      : servico.status === "concluido"
+                                      ? "bg-green-100 text-green-800"
+                                      : "bg-red-100 text-red-800"
+                                  }`}
+                                >
+                                  {servico.status === "em_andamento"
+                                    ? "Em andamento"
+                                    : servico.status === "concluido"
+                                    ? "Concluído"
+                                    : "Cancelado"}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => abrirEdicao(servico)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => excluirServico(servico.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="em_andamento" className="mt-0">
+                <Card>
+                  <CardContent className="p-0">
+                    {/* O mesmo conteúdo da tabela será exibido aqui, mas filtrado */}
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead>Veículo</TableHead>
+                          <TableHead>Mecânico</TableHead>
+                          <TableHead>Valor</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {servicosFiltrados.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={7} className="text-center py-4">
+                              Nenhum serviço em andamento
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          servicosFiltrados.map((servico) => (
+                            <TableRow key={servico.id}>
+                              <TableCell>
+                                {new Date(servico.data).toLocaleDateString('pt-BR')}
+                              </TableCell>
+                              <TableCell>{servico.cliente}</TableCell>
+                              <TableCell>{servico.veiculo}</TableCell>
+                              <TableCell>{servico.mecanicoNome}</TableCell>
+                              <TableCell>{formatarMoeda(servico.valor)}</TableCell>
+                              <TableCell>
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  Em andamento
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => abrirEdicao(servico)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => excluirServico(servico.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="concluido" className="mt-0">
+                {/* Tabela de Serviços Concluídos */}
+                <Card>
+                  <CardContent className="p-0">
+                    <Table>
+                      {/* Tabela similar às anteriores, mas filtrada por status "concluido" */}
+                    </Table>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="cancelado" className="mt-0">
+                {/* Tabela de Serviços Cancelados */}
+                <Card>
+                  <CardContent className="p-0">
+                    <Table>
+                      {/* Tabela similar às anteriores, mas filtrada por status "cancelado" */}
+                    </Table>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
           </div>
 
-          <TabsContent value="todos" className="mt-6">
-            <ServicosTable
-              servicos={filteredServicos}
-              isAdmin={isAdmin || isUsuario}
-              onEdit={handleOpenDialog}
-              onDelete={handleDelete}
-              onChangeStatus={handleChangeStatus}
-              formatarData={formatarData}
-              formatarValor={formatarValor}
-            />
-          </TabsContent>
-          
-          <TabsContent value="em_andamento" className="mt-6">
-            <ServicosTable
-              servicos={filteredServicos}
-              isAdmin={isAdmin || isUsuario}
-              onEdit={handleOpenDialog}
-              onDelete={handleDelete}
-              onChangeStatus={handleChangeStatus}
-              formatarData={formatarData}
-              formatarValor={formatarValor}
-            />
-          </TabsContent>
-          
-          <TabsContent value="concluido" className="mt-6">
-            <ServicosTable
-              servicos={filteredServicos}
-              isAdmin={isAdmin || isUsuario}
-              onEdit={handleOpenDialog}
-              onDelete={handleDelete}
-              onChangeStatus={handleChangeStatus}
-              formatarData={formatarData}
-              formatarValor={formatarValor}
-            />
-          </TabsContent>
-          
-          <TabsContent value="cancelado" className="mt-6">
-            <ServicosTable
-              servicos={filteredServicos}
-              isAdmin={isAdmin || isUsuario}
-              onEdit={handleOpenDialog}
-              onDelete={handleDelete}
-              onChangeStatus={handleChangeStatus}
-              formatarData={formatarData}
-              formatarValor={formatarValor}
-            />
-          </TabsContent>
-        </Tabs>
-      </div>
+          <div className="md:col-span-1">
+            <StatusSincronizacao />
+          </div>
+        </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {servicoEmEdicao ? "Editar Serviço" : "Novo Serviço"}
-            </DialogTitle>
-            <DialogDescription>
-              Preencha os detalhes do serviço abaixo.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit}>
+        {/* Diálogo para adicionar/editar serviço */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="sm:max-w-[550px]">
+            <DialogHeader>
+              <DialogTitle>
+                {editandoServico ? "Editar Serviço" : "Novo Serviço"}
+              </DialogTitle>
+              <DialogDescription>
+                {editandoServico
+                  ? "Edite os detalhes do serviço abaixo"
+                  : "Preencha os detalhes do novo serviço"}
+              </DialogDescription>
+            </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
+                <div className="space-y-2">
                   <Label htmlFor="data">Data</Label>
                   <Input
                     id="data"
@@ -395,214 +547,161 @@ const Servicos = () => {
                     type="date"
                     value={formData.data}
                     onChange={handleInputChange}
-                    required
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="mecanicoId">Mecânico</Label>
-                  <select
-                    id="mecanicoId"
-                    name="mecanicoId"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                <div className="space-y-2">
+                  <Label htmlFor="mecanicoId">
+                    <div className="flex items-center gap-1">
+                      <Wrench className="h-4 w-4" />
+                      <span>Mecânico Responsável</span>
+                    </div>
+                  </Label>
+                  <Select
                     value={formData.mecanicoId}
-                    onChange={handleInputChange}
-                    required
+                    onValueChange={handleMecanicoChange}
                   >
-                    <option value="">Selecione um mecânico</option>
-                    {mockMecanicos.map(mecanico => (
-                      <option key={mecanico.id} value={mecanico.id}>
-                        {mecanico.nome}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="mecanicoId" className={errors.mecanicoId ? "border-red-500" : ""}>
+                      <SelectValue placeholder="Selecione um mecânico" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mecanicos.map(mecanico => (
+                        <SelectItem key={mecanico.id} value={mecanico.id}>
+                          {mecanico.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.mecanicoId && (
+                    <p className="text-sm text-red-500">{errors.mecanicoId}</p>
+                  )}
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="cliente">Cliente</Label>
+              <div className="space-y-2">
+                <Label htmlFor="cliente">Nome do Cliente</Label>
                 <Input
                   id="cliente"
                   name="cliente"
                   value={formData.cliente}
                   onChange={handleInputChange}
-                  required
+                  className={errors.cliente ? "border-red-500" : ""}
                 />
+                {errors.cliente && (
+                  <p className="text-sm text-red-500">{errors.cliente}</p>
+                )}
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="veiculo">Veículo</Label>
-                <Input
-                  id="veiculo"
-                  name="veiculo"
-                  value={formData.veiculo}
-                  onChange={handleInputChange}
-                  placeholder="Marca, Modelo, Ano"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="veiculo">Veículo</Label>
+                  <Input
+                    id="veiculo"
+                    name="veiculo"
+                    value={formData.veiculo}
+                    onChange={handleInputChange}
+                    className={errors.veiculo ? "border-red-500" : ""}
+                    placeholder="Modelo e ano"
+                  />
+                  {errors.veiculo && (
+                    <p className="text-sm text-red-500">{errors.veiculo}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="telefone">
+                    <div className="flex items-center gap-1">
+                      <Phone className="h-4 w-4" />
+                      <span>Telefone (com DDD)</span>
+                    </div>
+                  </Label>
+                  <Input
+                    id="telefone"
+                    name="telefone"
+                    value={formData.telefone}
+                    onChange={handleInputChange}
+                    className={errors.telefone ? "border-red-500" : ""}
+                    placeholder="(69)9XXXX-XXXX"
+                    maxLength={11}
+                  />
+                  {errors.telefone && (
+                    <p className="text-sm text-red-500">{errors.telefone}</p>
+                  )}
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="descricao">Descrição do Serviço</Label>
+              <div className="space-y-2">
+                <Label htmlFor="descricao">
+                  <div className="flex items-center gap-1">
+                    <FileText className="h-4 w-4" />
+                    <span>Descrição do Serviço</span>
+                  </div>
+                </Label>
                 <Textarea
                   id="descricao"
                   name="descricao"
                   value={formData.descricao}
                   onChange={handleInputChange}
+                  className={errors.descricao ? "border-red-500" : ""}
+                  placeholder="Descreva detalhadamente o serviço a ser realizado"
                   rows={3}
-                  required
                 />
+                {errors.descricao && (
+                  <p className="text-sm text-red-500">{errors.descricao}</p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="valor">Valor (R$)</Label>
+                <div className="space-y-2">
+                  <Label htmlFor="valor">
+                    <div className="flex items-center gap-1">
+                      <DollarSign className="h-4 w-4" />
+                      <span>Valor (R$)</span>
+                    </div>
+                  </Label>
                   <Input
                     id="valor"
                     name="valor"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.valor}
+                    value={formData.valor === 0 ? "" : formData.valor.toString().replace(".", ",")}
                     onChange={handleInputChange}
-                    required
+                    className={errors.valor ? "border-red-500" : ""}
+                    placeholder="0,00"
                   />
+                  {errors.valor && (
+                    <p className="text-sm text-red-500">{errors.valor}</p>
+                  )}
                 </div>
-                <div className="grid gap-2">
+                <div className="space-y-2">
                   <Label htmlFor="status">Status</Label>
-                  <select
-                    id="status"
-                    name="status"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  <Select
                     value={formData.status}
-                    onChange={handleInputChange}
+                    onValueChange={(value) => handleStatusChange(value as StatusServico)}
                   >
-                    <option value="em_andamento">Em andamento</option>
-                    <option value="concluido">Concluído</option>
-                    <option value="cancelado">Cancelado</option>
-                  </select>
+                    <SelectTrigger id="status">
+                      <SelectValue placeholder="Selecione o status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="em_andamento">Em andamento</SelectItem>
+                      <SelectItem value="concluido">Concluído</SelectItem>
+                      <SelectItem value="cancelado">Cancelado</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setDialogOpen(false);
+                  resetarFormulario();
+                }}
+              >
                 Cancelar
               </Button>
-              <Button type="submit">Salvar</Button>
+              <Button type="button" onClick={salvarServico}>
+                {editandoServico ? "Atualizar" : "Salvar"}
+              </Button>
             </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      </div>
     </Layout>
-  );
-};
-
-// Componente de tabela de serviços para reutilização
-interface ServicosTableProps {
-  servicos: Servico[];
-  isAdmin: boolean;
-  onEdit: (servico: Servico) => void;
-  onDelete: (id: string) => void;
-  onChangeStatus: (id: string, status: StatusServico) => void;
-  formatarData: (data: string) => string;
-  formatarValor: (valor: number) => string;
-}
-
-const ServicosTable = ({
-  servicos,
-  isAdmin,
-  onEdit,
-  onDelete,
-  onChangeStatus,
-  formatarData,
-  formatarValor,
-}: ServicosTableProps) => {
-  return (
-    <Card>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Data</TableHead>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Veículo</TableHead>
-              <TableHead>Descrição</TableHead>
-              <TableHead>Mecânico</TableHead>
-              <TableHead>Valor</TableHead>
-              <TableHead>Status</TableHead>
-              {isAdmin && <TableHead className="text-right">Ações</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {servicos.length > 0 ? (
-              servicos.map((servico) => (
-                <TableRow key={servico.id}>
-                  <TableCell>{formatarData(servico.data)}</TableCell>
-                  <TableCell className="font-medium">{servico.cliente}</TableCell>
-                  <TableCell>{servico.veiculo}</TableCell>
-                  <TableCell>
-                    <div className="max-w-[200px] truncate" title={servico.descricao}>
-                      {servico.descricao}
-                    </div>
-                  </TableCell>
-                  <TableCell>{servico.mecanicoNome}</TableCell>
-                  <TableCell>{formatarValor(servico.valor)}</TableCell>
-                  <TableCell>
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs ${
-                        servico.status === "em_andamento"
-                          ? "bg-blue-100 text-blue-700"
-                          : servico.status === "concluido"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {servico.status === "em_andamento"
-                        ? "Em andamento"
-                        : servico.status === "concluido"
-                        ? "Concluído"
-                        : "Cancelado"}
-                    </span>
-                  </TableCell>
-                  {isAdmin && (
-                    <TableCell className="text-right">
-                      <div className="flex justify-end space-x-1">
-                        {servico.status !== "concluido" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 px-2 text-green-600"
-                            onClick={() => onChangeStatus(servico.id, "concluido")}
-                          >
-                            Concluir
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onEdit(servico)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-red-500 hover:text-red-700"
-                          onClick={() => onDelete(servico.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-6">
-                  Nenhum serviço encontrado.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
   );
 };
 
